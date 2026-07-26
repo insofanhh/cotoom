@@ -36,7 +36,14 @@ export default function LoginPage() {
       toast.error('Số điện thoại hoặc mật khẩu không đúng')
     } else {
       toast.success('Đăng nhập thành công!')
-      router.push('/')
+      // Route by role: drivers land on their dashboard, admins on the panel
+      let destination = '/'
+      try {
+        const session = await fetch('/api/auth/session').then((r) => r.json())
+        if (session?.user?.role === 'DRIVER') destination = '/driver/dashboard'
+        else if (session?.user?.role === 'ADMIN') destination = '/admin'
+      } catch {}
+      router.push(destination)
       router.refresh()
     }
   }
