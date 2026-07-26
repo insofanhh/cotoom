@@ -12,6 +12,9 @@ import {
 import { QuickRideButton } from '@/components/home/QuickRideButton'
 import { prisma } from '@/lib/prisma'
 
+// Data comes from the database — don't try to prerender at build time
+export const dynamic = 'force-dynamic'
+
 async function getHomeData() {
   const [attractions, homestays, restaurants] = await Promise.all([
     prisma.location.findMany({

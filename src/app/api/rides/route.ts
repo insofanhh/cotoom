@@ -42,8 +42,9 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Dispatch drivers asynchronously (no await — fire and forget)
-    dispatchDrivers(ride.id, vehicleType, acceptToken).catch(console.error)
+    // Broadcast to all matching drivers before responding — background work
+    // is killed on serverless hosts (Vercel), so no fire-and-forget here
+    await dispatchDrivers(ride, acceptToken).catch(console.error)
 
     return NextResponse.json(ride, { status: 201 })
   } catch (error) {
@@ -52,67 +53,55 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function dispatchDrivers(rideId: string, vehicleType: string, acceptToken: string) {
-  // Get available drivers ordered by rating
+type RideRecord = {
+  id: string
+  vehicleType: string
+  pickupAddress: string | null
+  dropoffAddress: string | null
+  dropoffName: string | null
+  totalPrice: number
+}
+
+// Notify every available driver at once; the first to accept wins.
+// Must finish before the HTTP response — serverless hosts kill background work.
+async function dispatchDrivers(ride: RideRecord, acceptToken: string) {
   const drivers = await prisma.driverProfile.findMany({
     where: {
       status: 'APPROVED',
       isOnline: true,
       isBusy: false,
-      vehicleType: vehicleType as any,
+      vehicleType: ride.vehicleType as any,
     },
-    orderBy: { ratingAvg: 'desc' },
     include: { user: { select: { id: true } } },
   })
 
   if (drivers.length === 0) {
-    // No drivers available — cancel after timeout
-    setTimeout(async () => {
-      const ride = await prisma.ride.findUnique({ where: { id: rideId } })
-      if (ride?.status === 'SEARCHING') {
-        await prisma.ride.update({ where: { id: rideId }, data: { status: 'CANCELLED' } })
-      }
-    }, 60000)
+    // No drivers available — cancel right away and tell the client
+    await prisma.ride.update({ where: { id: ride.id }, data: { status: 'CANCELLED' } })
+    try {
+      await pusherServer.trigger(`presence-ride-${ride.id}`, 'ride:status-update', {
+        status: 'CANCELLED',
+        rideId: ride.id,
+      })
+    } catch {
+      // Pusher not configured — skip
+    }
     return
   }
 
-  for (let i = 0; i < drivers.length; i++) {
-    const driver = drivers[i]
-    const acceptUrl = `${process.env.NEXTAUTH_URL}/driver/accept?rideId=${rideId}&token=${acceptToken}`
-
-    // Send Pusher notification to this driver
-    try {
-      const currentRide = await prisma.ride.findUnique({ where: { id: rideId } })
-      await pusherServer.trigger(
-        `private-driver-${driver.user.id}`,
-        'ride:new-request',
-        {
-          rideId,
-          acceptUrl,
-          acceptToken,
-          vehicleType,
-          pickup: currentRide?.pickupAddress || 'Vị trí hiện tại',
-          dropoff: currentRide?.dropoffAddress || currentRide?.dropoffName || 'Điểm đến',
-          price: currentRide?.totalPrice || 0,
-        }
-      )
-    } catch {
-      // Pusher not configured yet — skip
-    }
-
-    // Wait 15 seconds for acceptance, then try next driver
-    await new Promise((resolve) => setTimeout(resolve, 15000))
-
-    // Check if ride was accepted
-    const ride = await prisma.ride.findUnique({ where: { id: rideId } })
-    if (ride?.status !== 'SEARCHING') {
-      return // Accepted or cancelled — stop dispatching
-    }
+  const payload = {
+    rideId: ride.id,
+    acceptUrl: `${process.env.NEXTAUTH_URL}/driver/accept?rideId=${ride.id}&token=${acceptToken}`,
+    acceptToken,
+    vehicleType: ride.vehicleType,
+    pickup: ride.pickupAddress || 'Vị trí hiện tại',
+    dropoff: ride.dropoffAddress || ride.dropoffName || 'Điểm đến',
+    price: ride.totalPrice || 0,
   }
 
-  // All drivers exhausted — cancel
-  await prisma.ride.update({
-    where: { id: rideId },
-    data: { status: 'CANCELLED' },
-  })
+  await Promise.allSettled(
+    drivers.map((driver) =>
+      pusherServer.trigger(`private-driver-${driver.user.id}`, 'ride:new-request', payload)
+    )
+  )
 }

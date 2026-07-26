@@ -9,11 +9,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createLocation, updateLocation } from '@/app/admin/places/actions'
 import { toast } from 'sonner'
-import type { Location } from '@prisma/client'
+import type { LocationModel as Location } from '@/generated/prisma/models'
 
 interface LocationFormProps {
   location?: Location
-  children?: React.ReactNode
+  children?: React.ReactElement
 }
 
 export function LocationForm({ location, children }: LocationFormProps) {
@@ -35,7 +35,7 @@ export function LocationForm({ location, children }: LocationFormProps) {
       longitude: parseFloat(formData.get('longitude') as string) || 0,
       priceRange: formData.get('priceRange') as string,
       contactPhone: (formData.get('contactPhone') as string) || null,
-      images: location?.images || ['/uploads/placeholder.jpg'] // simplified image handling
+      images: (location?.images as string[] | undefined) || ['/uploads/placeholder.jpg'] // simplified image handling
     }
 
     const res = isEdit && location 
@@ -54,9 +54,7 @@ export function LocationForm({ location, children }: LocationFormProps) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {children || <Button>Thêm địa điểm</Button>}
-      </DialogTrigger>
+      <DialogTrigger render={children ?? <Button>Thêm địa điểm</Button>} />
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Chỉnh sửa địa điểm' : 'Thêm địa điểm mới'}</DialogTitle>

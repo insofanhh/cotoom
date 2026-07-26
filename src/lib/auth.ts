@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  trustHost: true, // required behind Vercel/reverse proxies
   providers: [
     Credentials({
       name: 'credentials',
@@ -33,7 +34,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: user.phone, // NextAuth requires email field
           phone: user.phone,
           role: user.role,
-          avatar: user.avatar,
+          avatar: user.avatar ?? undefined,
         }
       },
     }),

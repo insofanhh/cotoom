@@ -3,6 +3,8 @@ import { PrismaClient } from '../generated/prisma/client'
 
 function parseConnectionString(url: string) {
   const parsed = new URL(url)
+  // Cloud MySQL (TiDB, Aiven, PlanetScale...) requires TLS: append ?ssl=true to DATABASE_URL
+  const useSsl = ['true', '1'].includes(parsed.searchParams.get('ssl') ?? '')
   return {
     host: parsed.hostname,
     port: parseInt(parsed.port || '3306'),
@@ -10,6 +12,7 @@ function parseConnectionString(url: string) {
     password: decodeURIComponent(parsed.password),
     database: parsed.pathname.slice(1),
     connectionLimit: 5,
+    ...(useSsl ? { ssl: { rejectUnauthorized: true } } : {}),
   }
 }
 

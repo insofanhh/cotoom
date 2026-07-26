@@ -36,14 +36,15 @@ export async function GET(req: NextRequest, { params }: Params) {
       return NextResponse.redirect(new URL('/driver/dashboard?error=invalid', req.url))
     }
 
-    // Accept the ride
-    const updatedRide = await prisma.ride.update({
-      where: { id },
-      data: {
-        status: 'ACCEPTED',
-        driverId,
-      },
+    // Accept the ride — atomic claim so concurrent accepts can't double-assign
+    const claimed = await prisma.ride.updateMany({
+      where: { id, acceptToken: token, status: 'SEARCHING' },
+      data: { status: 'ACCEPTED', driverId },
     })
+    if (claimed.count === 0) {
+      return NextResponse.redirect(new URL('/driver/dashboard?error=expired', req.url))
+    }
+    const updatedRide = (await prisma.ride.findUnique({ where: { id } }))!
 
     // Mark driver as busy
     await prisma.driverProfile.update({
@@ -93,16 +94,16 @@ export async function POST(req: NextRequest, { params }: Params) {
     const body = await req.json()
     const { acceptToken } = body
 
-    const ride = await prisma.ride.findUnique({ where: { id } })
-
-    if (!ride || ride.acceptToken !== acceptToken || ride.status !== 'SEARCHING') {
+    // Atomic claim — with broadcast dispatch several drivers can race, only one wins
+    const claimed = await prisma.ride.updateMany({
+      where: { id, acceptToken, status: 'SEARCHING' },
+      data: { status: 'ACCEPTED', driverId },
+    })
+    if (claimed.count === 0) {
       return NextResponse.json({ message: 'Ride unavailable or expired' }, { status: 409 })
     }
 
-    const updatedRide = await prisma.ride.update({
-      where: { id },
-      data: { status: 'ACCEPTED', driverId },
-    })
+    const updatedRide = (await prisma.ride.findUnique({ where: { id } }))!
 
     await prisma.driverProfile.update({
       where: { userId: driverId },
