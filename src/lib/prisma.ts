@@ -12,6 +12,9 @@ function parseConnectionString(url: string) {
     password: decodeURIComponent(parsed.password),
     database: parsed.pathname.slice(1),
     connectionLimit: 5,
+    // mariadb's default connectTimeout (1s) is too short for cross-region
+    // TLS handshakes (e.g. Vercel US -> TiDB Singapore)
+    connectTimeout: 15000,
     ...(useSsl ? { ssl: { rejectUnauthorized: true } } : {}),
   }
 }
