@@ -53,9 +53,11 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl ocean-gradient flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <Waves size={28} className="text-white" />
-          </div>
+          <img
+            src="/icons/icon-192.png"
+            alt="CoToom"
+            className="w-16 h-16 rounded-2xl mx-auto mb-4 shadow-lg"
+          />
           <h1 className="font-outfit font-bold text-2xl text-slate-800">CoToom</h1>
           <p className="text-slate-500 text-sm mt-1">Đặt xe và khám phá Cô Tô</p>
         </div>

@@ -19,6 +19,9 @@ export const metadata: Metadata = {
     locale: 'vi_VN',
   },
   manifest: '/manifest.json',
+  icons: {
+    apple: '/icons/apple-touch-icon.png',
+  },
 }
 
 export const viewport: Viewport = {
