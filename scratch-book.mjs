@@ -30,6 +30,7 @@ res = await f('/api/rides', {
     pickupAddress: 'Thị trấn Cô Tô', dropoffAddress: 'Đỉnh Hải Đăng Cô Tô',
     dropoffName: 'Đỉnh Hải Đăng Cô Tô',
     distanceKm: 5.0, totalPrice: 85000, vehicleType: 'MOTORBIKE',
+    note: 'Đứng trước cổng chợ, gọi điện khi đến nhé!',
   }),
 })
 const ride = await res.json()

@@ -130,6 +130,7 @@ model Ride {
   pickupAddress   String?
   dropoffAddress  String?
   dropoffName     String?     // Name of destination location
+  note            String?     // Client note for the driver (e.g. "gọi khi đến")
 
   distanceKm      Float
   totalPrice      Float

@@ -69,6 +69,8 @@ export function RideFlow() {
   } = useRideStore()
 
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [editingPickup, setEditingPickup] = useState(false)
+  const editingPickupRef = useRef(false)
   const [locationError, setLocationError] = useState<string | null>(null)
   const [searchCountdown, setSearchCountdown] = useState(60)
   const [locations, setLocations] = useState<any[]>([])
@@ -106,8 +108,37 @@ export function RideFlow() {
   }, [])
 
   const handleLocationSelect = useCallback((lat: number, lng: number, address: string, name: string) => {
+    // While adjusting the pickup point, a map tap moves the pickup — not the destination
+    if (editingPickupRef.current) {
+      const { booking: current } = useRideStore.getState()
+      if (current) {
+        setBooking({
+          ...current,
+          pickupLat: lat,
+          pickupLng: lng,
+          pickupAddress: address,
+          durationMin: undefined, // route will recalculate for the new pickup
+        })
+      }
+      editingPickupRef.current = false
+      setEditingPickup(false)
+      setDrawerOpen(true)
+      return
+    }
     setPrefilledDestination({ lat, lng, address, name })
-  }, [setPrefilledDestination])
+  }, [setPrefilledDestination, setBooking])
+
+  const startEditingPickup = useCallback(() => {
+    editingPickupRef.current = true
+    setEditingPickup(true)
+    setDrawerOpen(false)
+  }, [])
+
+  const cancelEditingPickup = useCallback(() => {
+    editingPickupRef.current = false
+    setEditingPickup(false)
+    setDrawerOpen(true)
+  }, [])
 
   // OSRM routed distance is the real road distance — replace the straight-line
   // estimate with it while the user is still previewing (never after booking)
@@ -335,6 +366,23 @@ export function RideFlow() {
             vehicleType: driverInfo.vehicleType
           }] : drivers}
         />
+
+        {/* Pickup adjustment hint */}
+        {editingPickup && (
+          <div className="absolute bottom-6 left-4 right-4 bg-white rounded-2xl p-4 shadow-xl border border-blue-100 z-[500]">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                <MapPin size={16} className="text-blue-600" />
+              </div>
+              <p className="text-sm font-medium text-slate-700 flex-1">
+                Chạm vào bản đồ để ghim lại điểm đón của bạn
+              </p>
+              <Button variant="outline" size="sm" onClick={cancelEditingPickup}>
+                Hủy
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* State overlays */}
         <AnimatePresence>
@@ -652,10 +700,18 @@ export function RideFlow() {
               <div className="space-y-3">
                 <div className="flex items-start gap-3">
                   <div className="w-3 h-3 rounded-full bg-blue-500 mt-1 flex-shrink-0" />
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <p className="text-xs text-slate-400">Điểm đón</p>
-                    <p className="text-sm font-medium text-slate-700">{booking.pickupAddress}</p>
+                    <p className="text-sm font-medium text-slate-700 line-clamp-2">{booking.pickupAddress}</p>
                   </div>
+                  <button
+                    id="ride-edit-pickup"
+                    type="button"
+                    onClick={startEditingPickup}
+                    className="text-blue-500 text-xs font-semibold flex-shrink-0 bg-blue-50 rounded-lg px-2.5 py-1.5 active:scale-95"
+                  >
+                    Sửa
+                  </button>
                 </div>
                 <div className="ml-1.5 w-px h-4 bg-slate-200" />
                 <div className="flex items-start gap-3">
@@ -666,6 +722,17 @@ export function RideFlow() {
                   </div>
                 </div>
               </div>
+
+              {/* Note for the driver */}
+              <textarea
+                id="ride-note"
+                value={booking.note ?? ''}
+                onChange={(e) => setBooking({ ...booking, note: e.target.value })}
+                placeholder="Ghi chú cho tài xế (VD: đứng trước cổng chợ, gọi khi đến...)"
+                rows={2}
+                maxLength={300}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 resize-none outline-none focus:ring-2 focus:ring-blue-400"
+              />
 
               {/* Price breakdown */}
               <div className="bg-slate-50 rounded-xl p-4 space-y-2">

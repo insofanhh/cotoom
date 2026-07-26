@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const {
       pickupLat, pickupLng, dropoffLat, dropoffLng,
       pickupAddress, dropoffAddress, dropoffName,
-      distanceKm, totalPrice, vehicleType,
+      distanceKm, totalPrice, vehicleType, note,
     } = body
 
     if (!pickupLat || !pickupLng || !dropoffLat || !dropoffLng || !distanceKm || !totalPrice || !vehicleType) {
@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
         pickupAddress: pickupAddress ?? '',
         dropoffAddress: dropoffAddress ?? '',
         dropoffName: dropoffName ?? '',
+        note: typeof note === 'string' && note.trim() ? note.trim().slice(0, 300) : null,
         distanceKm,
         totalPrice,
         vehicleType,
@@ -63,14 +64,17 @@ type RideRecord = {
   pickupAddress: string | null
   dropoffAddress: string | null
   dropoffName: string | null
+  note: string | null
   distanceKm: number
   totalPrice: number
 }
 
+const DEFAULT_DISPATCH_RADIUS_KM = 5
+
 // Notify every available driver at once; the first to accept wins.
 // Must finish before the HTTP response — serverless hosts kill background work.
 async function dispatchDrivers(ride: RideRecord, acceptToken: string) {
-  const drivers = await prisma.driverProfile.findMany({
+  const allDrivers = await prisma.driverProfile.findMany({
     where: {
       status: 'APPROVED',
       isOnline: true,
@@ -79,6 +83,24 @@ async function dispatchDrivers(ride: RideRecord, acceptToken: string) {
     },
     include: { user: { select: { id: true } } },
   })
+
+  // Prefer drivers within the dispatch radius of the pickup point (admin-tunable
+  // via the dispatch_radius_km setting). Fall back to everyone if none are close
+  // or if a driver has no known position yet.
+  let radiusKm = DEFAULT_DISPATCH_RADIUS_KM
+  try {
+    const setting = await prisma.setting.findUnique({ where: { key: 'dispatch_radius_km' } })
+    const parsed = parseFloat(setting?.value ?? '')
+    if (!isNaN(parsed) && parsed > 0) radiusKm = parsed
+  } catch {}
+
+  const nearby = allDrivers.filter(
+    (d) =>
+      d.latitude != null &&
+      d.longitude != null &&
+      calculateDistance(d.latitude, d.longitude, ride.pickupLat, ride.pickupLng) <= radiusKm
+  )
+  const drivers = nearby.length > 0 ? nearby : allDrivers
 
   if (drivers.length === 0) {
     // No drivers available — cancel right away and tell the client
@@ -107,6 +129,7 @@ async function dispatchDrivers(ride: RideRecord, acceptToken: string) {
     dropoffLng: ride.dropoffLng,
     rideKm: ride.distanceKm,
     price: ride.totalPrice || 0,
+    note: ride.note,
   }
 
   const results = await Promise.allSettled(

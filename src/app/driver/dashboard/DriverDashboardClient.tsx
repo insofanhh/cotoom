@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { signOut } from 'next-auth/react'
 import { toast } from 'sonner'
-import { formatVND } from '@/lib/utils'
+import { formatVND, formatRelativeTime } from '@/lib/utils'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { getPusherClient } from '@/lib/pusher'
@@ -23,11 +23,29 @@ interface DriverProfile {
   totalRevenue: number
 }
 
+interface Earnings {
+  todayTrips: number
+  todayRevenue: number
+  weekTrips: number
+  weekRevenue: number
+}
+
+interface RecentRide {
+  id: string
+  status: string
+  name: string
+  totalPrice: number
+  updatedAt: string
+  rating: number | null
+}
+
 interface Props {
   profile: DriverProfile
   userId: string
   userName: string
   initialActiveRide?: any
+  earnings?: Earnings
+  recentRides?: RecentRide[]
 }
 
 const vehicleLabels: Record<string, string> = {
@@ -38,7 +56,7 @@ const vehicleLabels: Record<string, string> = {
 
 const INCOMING_TIMEOUT_SECONDS = 20
 
-export function DriverDashboardClient({ profile, userId, userName, initialActiveRide }: Props) {
+export function DriverDashboardClient({ profile, userId, userName, initialActiveRide, earnings, recentRides }: Props) {
   const [localProfile, setLocalProfile] = useState(profile)
   const [isOnline, setIsOnline] = useState(profile.isOnline)
   const [toggling, setToggling] = useState(false)
@@ -190,6 +208,7 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
         dropoffLat: incomingRide.dropoffLat,
         dropoffLng: incomingRide.dropoffLng,
         totalPrice: incomingRide.price,
+        note: incomingRide.note,
         client: { name: 'Khách hàng' },
       })
       setIncomingRide(null)
@@ -227,6 +246,7 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
           }))
         }
         setActiveRide(null)
+        router.refresh() // refresh server-fetched earnings + ride history
       } else {
         toast.success('Đã cập nhật trạng thái!')
         setActiveRide({ ...activeRide, status })
@@ -392,6 +412,12 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
                     <p className="font-medium text-sm text-slate-800 line-clamp-2">{activeRide.dropoffAddress || activeRide.dropoffName}</p>
                   </div>
                 </div>
+                {activeRide.note && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                    <p className="text-xs text-amber-600 font-semibold mb-0.5">📝 Ghi chú của khách</p>
+                    <p className="text-sm text-slate-700">{activeRide.note}</p>
+                  </div>
+                )}
               </div>
 
               {/* Navigation deep link — to pickup before the trip, to dropoff during it */}
@@ -507,6 +533,11 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
                   <p className="font-medium text-sm text-slate-800 line-clamp-2">{incomingRide.dropoff}</p>
                 </div>
               </div>
+              {incomingRide.note && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <p className="text-xs text-amber-700">📝 {incomingRide.note}</p>
+                </div>
+              )}
               <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <p className="text-xs text-slate-500">Thu nhập dự kiến</p>
@@ -547,6 +578,63 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
               <p className="text-slate-400 text-sm">
                 {isOnline ? 'Đang chờ chuyến mới...' : 'Bật online để nhận chuyến'}
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* Earnings */}
+        {earnings && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+            <div className="flex items-center gap-2 mb-3">
+              <TrendingUp size={16} className="text-emerald-500" />
+              <p className="font-semibold text-slate-800 text-sm">Thu nhập</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-emerald-50 rounded-xl p-3">
+                <p className="text-xs text-emerald-600 font-medium">Hôm nay</p>
+                <p className="font-outfit font-bold text-emerald-700 text-lg mt-1">
+                  {formatVND(earnings.todayRevenue)}
+                </p>
+                <p className="text-xs text-slate-400 mt-0.5">{earnings.todayTrips} chuyến</p>
+              </div>
+              <div className="bg-blue-50 rounded-xl p-3">
+                <p className="text-xs text-blue-600 font-medium">7 ngày qua</p>
+                <p className="font-outfit font-bold text-blue-700 text-lg mt-1">
+                  {formatVND(earnings.weekRevenue)}
+                </p>
+                <p className="text-xs text-slate-400 mt-0.5">{earnings.weekTrips} chuyến</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Recent rides */}
+        {recentRides && recentRides.length > 0 && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+            <div className="flex items-center gap-2 mb-3">
+              <Route size={16} className="text-blue-500" />
+              <p className="font-semibold text-slate-800 text-sm">Chuyến gần đây</p>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {recentRides.map((r) => (
+                <div key={r.id} className="py-2.5 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-700 truncate">{r.name}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{formatRelativeTime(r.updatedAt)}</p>
+                  </div>
+                  {r.rating != null && (
+                    <span className="flex items-center gap-0.5 text-amber-500 text-xs font-semibold">
+                      <Star size={11} fill="currentColor" />
+                      {r.rating}
+                    </span>
+                  )}
+                  {r.status === 'CANCELLED' ? (
+                    <span className="text-xs text-red-400 font-medium">Đã hủy</span>
+                  ) : (
+                    <span className="text-sm font-bold text-emerald-600">{formatVND(r.totalPrice)}</span>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}

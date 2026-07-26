@@ -60,6 +60,7 @@ export interface RideBooking {
   totalPrice: number
   vehicleType: VehicleType
   durationMin?: number
+  note?: string
 }
 
 export interface DriverInfo {
