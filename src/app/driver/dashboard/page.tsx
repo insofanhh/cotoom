@@ -1,6 +1,7 @@
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
+import { calculateDistance } from '@/lib/utils'
 import { DriverDashboardClient } from './DriverDashboardClient'
 import type { Metadata } from 'next'
 
@@ -59,12 +60,49 @@ export default async function DriverDashboardPage() {
     }),
   ])
 
+  // A driver arriving from a push notification missed the realtime event —
+  // hydrate the freshest still-claimable request so the card shows anyway.
+  let pendingRide: any = null
+  if (!activeRide && profile.status === 'APPROVED' && profile.isOnline && !profile.isBusy) {
+    const p = await prisma.ride.findFirst({
+      where: {
+        status: 'SEARCHING',
+        vehicleType: profile.vehicleType,
+        createdAt: { gte: new Date(Date.now() - 2 * 60 * 1000) },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (p) {
+      pendingRide = {
+        rideId: p.id,
+        acceptToken: p.acceptToken,
+        vehicleType: p.vehicleType,
+        pickup: p.pickupAddress || 'Vị trí hiện tại',
+        dropoff: p.dropoffAddress || p.dropoffName || 'Điểm đến',
+        pickupLat: p.pickupLat,
+        pickupLng: p.pickupLng,
+        dropoffLat: p.dropoffLat,
+        dropoffLng: p.dropoffLng,
+        rideKm: p.distanceKm,
+        price: p.totalPrice,
+        note: p.note,
+        distanceToPickupKm:
+          profile.latitude != null && profile.longitude != null
+            ? parseFloat(
+                calculateDistance(profile.latitude, profile.longitude, p.pickupLat, p.pickupLng).toFixed(1)
+              )
+            : null,
+      }
+    }
+  }
+
   return (
     <DriverDashboardClient
       profile={profile}
       userId={session.user.id}
       userName={session.user.name}
       initialActiveRide={activeRide}
+      initialPendingRide={pendingRide}
       earnings={{
         todayTrips: todayAgg._count,
         todayRevenue: todayAgg._sum.totalPrice ?? 0,

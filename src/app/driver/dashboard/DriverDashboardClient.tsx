@@ -46,6 +46,7 @@ interface Props {
   userId: string
   userName: string
   initialActiveRide?: any
+  initialPendingRide?: any
   earnings?: Earnings
   recentRides?: RecentRide[]
 }
@@ -58,11 +59,14 @@ const vehicleLabels: Record<string, string> = {
 
 const INCOMING_TIMEOUT_SECONDS = 20
 
-export function DriverDashboardClient({ profile, userId, userName, initialActiveRide, earnings, recentRides }: Props) {
+export function DriverDashboardClient({ profile, userId, userName, initialActiveRide, initialPendingRide, earnings, recentRides }: Props) {
   const [localProfile, setLocalProfile] = useState(profile)
   const [isOnline, setIsOnline] = useState(profile.isOnline)
   const [toggling, setToggling] = useState(false)
-  const [incomingRide, setIncomingRide] = useState<any>(null)
+  // Hydrate a still-claimable request (e.g. arriving via push notification tap)
+  const [incomingRide, setIncomingRide] = useState<any>(
+    initialActiveRide ? null : initialPendingRide ?? null
+  )
   const [incomingCountdown, setIncomingCountdown] = useState(INCOMING_TIMEOUT_SECONDS)
   const [activeRide, setActiveRide] = useState<any>(initialActiveRide || null)
   const router = useRouter()
