@@ -24,6 +24,7 @@ import { useRideStore } from '@/store/rideStore'
 import { calculateDistance, formatVND } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { getPusherClient } from '@/lib/pusher'
+import { ensurePushSubscription } from '@/lib/push-client'
 import { toast } from 'sonner'
 import { MapComponent } from './MapComponent'
 import { RideRating } from './RideRating'
@@ -286,6 +287,8 @@ export function RideFlow() {
 
   const confirmRide = async () => {
     if (!booking) return
+    // User gesture — register this device for ride status notifications
+    ensurePushSubscription().catch(() => {})
     setDrawerOpen(false)
     setFlowState('SEARCHING')
     setSearchCountdown(60)

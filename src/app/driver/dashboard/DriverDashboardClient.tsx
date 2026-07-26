@@ -11,6 +11,7 @@ import { formatVND, formatRelativeTime } from '@/lib/utils'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { getPusherClient } from '@/lib/pusher'
+import { ensurePushSubscription } from '@/lib/push-client'
 
 interface DriverProfile {
   isOnline: boolean
@@ -260,6 +261,10 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
 
   const toggleOnline = async () => {
     ensureAudioContext() // user gesture — unlock audio for ride alerts
+    if (!isOnline) {
+      // Going online — register this device for push ride alerts
+      ensurePushSubscription().catch(() => {})
+    }
     setToggling(true)
     try {
       const res = await fetch('/api/driver/status', {

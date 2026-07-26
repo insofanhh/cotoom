@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { Toaster } from '@/components/ui/sonner'
+import { PwaRegister } from '@/components/layout/PwaRegister'
 
 export const metadata: Metadata = {
   title: {
@@ -46,6 +47,7 @@ export default function RootLayout({
       <body suppressHydrationWarning>
         {children}
         <Toaster richColors position="top-center" />
+        <PwaRegister />
       </body>
     </html>
   )

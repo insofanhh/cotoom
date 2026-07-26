@@ -65,8 +65,22 @@ model User {
   driverProfile DriverProfile?
   ridesAsClient Ride[]        @relation("ClientRides")
   ridesAsDriver Ride[]        @relation("DriverRides")
+  pushSubscriptions PushSubscription[]
 
   @@map("users")
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique @db.VarChar(500)
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 model DriverProfile {

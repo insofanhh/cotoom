@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { generateToken, calculateDistance } from '@/lib/utils'
 import { getPricePerKm, computePrice } from '@/lib/pricing'
 import { pusherServer } from '@/lib/pusher'
+import { sendPushToUser } from '@/lib/push'
 
 export async function POST(req: NextRequest) {
   try {
@@ -143,7 +144,7 @@ async function dispatchDrivers(ride: RideRecord, acceptToken: string) {
   }
 
   const results = await Promise.allSettled(
-    drivers.map((driver) => {
+    drivers.map(async (driver) => {
       // Each driver sees how far away the pickup point is from them
       const distanceToPickupKm =
         driver.latitude != null && driver.longitude != null
@@ -151,10 +152,19 @@ async function dispatchDrivers(ride: RideRecord, acceptToken: string) {
               calculateDistance(driver.latitude, driver.longitude, ride.pickupLat, ride.pickupLng).toFixed(1)
             )
           : null
-      return pusherServer.trigger(`private-driver-${driver.user.id}`, 'ride:new-request', {
-        ...payload,
-        distanceToPickupKm,
-      })
+      // Realtime event for open dashboards + push for closed/background apps
+      await Promise.allSettled([
+        pusherServer.trigger(`private-driver-${driver.user.id}`, 'ride:new-request', {
+          ...payload,
+          distanceToPickupKm,
+        }),
+        sendPushToUser(driver.user.id, {
+          title: '🛵 Có chuyến xe mới!',
+          body: `${payload.pickup} → ${payload.dropoff} • ${payload.price.toLocaleString('vi-VN')}đ${distanceToPickupKm != null ? ` • cách bạn ${distanceToPickupKm} km` : ''}`,
+          url: '/driver/dashboard',
+          tag: `ride-request-${ride.id}`,
+        }),
+      ])
     })
   )
   results.forEach((r, i) => {

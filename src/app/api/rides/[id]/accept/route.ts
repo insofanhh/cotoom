@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { pusherServer } from '@/lib/pusher'
 import { auth } from '@/lib/auth'
+import { sendPushToUser } from '@/lib/push'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -74,6 +75,13 @@ export async function GET(req: NextRequest, { params }: Params) {
       // Pusher not configured — skip
     }
 
+    await sendPushToUser(updatedRide.clientId, {
+      title: '✅ Tài xế đã nhận chuyến!',
+      body: 'Tài xế đang trên đường đến đón bạn.',
+      url: `/ride/${id}`,
+      tag: `ride-${id}`,
+    })
+
     return NextResponse.redirect(new URL('/driver/dashboard?accepted=1', req.url))
   } catch (error) {
     console.error('[GET /api/rides/accept]', error)
@@ -129,6 +137,13 @@ export async function POST(req: NextRequest, { params }: Params) {
         }
       })
     } catch { }
+
+    await sendPushToUser(updatedRide.clientId, {
+      title: '✅ Tài xế đã nhận chuyến!',
+      body: `${driver?.name ?? 'Tài xế'} (${driver?.driverProfile?.vehiclePlate ?? ''}) đang trên đường đến đón bạn.`,
+      url: `/ride/${id}`,
+      tag: `ride-${id}`,
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {
