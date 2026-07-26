@@ -36,16 +36,11 @@ const vehicleColors = {
   ELECTRIC_CAR: 'bg-emerald-500',
 }
 
-const pricePerKm: Record<string, number> = {
+// Fallback rates — replaced by admin-configured settings fetched on mount
+const DEFAULT_PRICE_PER_KM: Record<string, number> = {
   MOTORBIKE: 15000,
   CAR: 25000,
   ELECTRIC_CAR: 20000,
-}
-
-const baseFare: Record<string, number> = {
-  MOTORBIKE: 10000,
-  CAR: 20000,
-  ELECTRIC_CAR: 15000,
 }
 
 export function RideFlow() {
@@ -79,6 +74,17 @@ export function RideFlow() {
   const [hasRated, setHasRated] = useState(false)
 
   const searchInputRef = useRef<HTMLDivElement>(null)
+
+  // Admin-configured price table (VND per km) — formula: rate x distance
+  const pricePerKmRef = useRef<Record<string, number>>({ ...DEFAULT_PRICE_PER_KM })
+  useEffect(() => {
+    fetch('/api/settings/pricing')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.pricePerKm) pricePerKmRef.current = data.pricePerKm
+      })
+      .catch(() => {}) // defaults still apply
+  }, [])
 
   // Fetch client location and nearby drivers on load
   useEffect(() => {
@@ -145,7 +151,7 @@ export function RideFlow() {
   const handleRouteFound = useCallback((distanceKm: number, durationMin: number) => {
     const { flowState: state, booking: current, selectedVehicleType: vehicle } = useRideStore.getState()
     if (state !== 'PREVIEW' || !current) return
-    const price = baseFare[vehicle] + distanceKm * pricePerKm[vehicle]
+    const price = distanceKm * pricePerKmRef.current[vehicle]
     setBooking({
       ...current,
       distanceKm: parseFloat(distanceKm.toFixed(2)),
@@ -251,8 +257,7 @@ export function RideFlow() {
           prefilledDestination.lat,
           prefilledDestination.lng
         )
-        const base = baseFare[selectedVehicleType]
-        const price = base + dist * pricePerKm[selectedVehicleType]
+        const price = dist * pricePerKmRef.current[selectedVehicleType]
 
         setBooking({
           pickupLat: latitude,

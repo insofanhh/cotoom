@@ -42,8 +42,6 @@ async function main() {
     { key: 'price_per_km_car', value: '25000' },
     { key: 'price_per_km_electric', value: '20000' },
     { key: 'admin_zalo_phone', value: '0901234567' },
-    { key: 'base_fare_motorbike', value: '10000' },
-    { key: 'base_fare_car', value: '20000' },
   ]
 
   for (const s of settings) {

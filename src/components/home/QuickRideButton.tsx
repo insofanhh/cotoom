@@ -6,12 +6,21 @@ import { motion } from 'framer-motion'
 import { useRideStore } from '@/store/rideStore'
 
 const vehicles = [
-  { type: 'MOTORBIKE' as const, icon: Bike, label: 'Xe máy', color: 'bg-blue-500', from: '10k' },
-  { type: 'CAR' as const, icon: Car, label: 'Ô tô', color: 'bg-indigo-500', from: '20k' },
-  { type: 'ELECTRIC_CAR' as const, icon: Zap, label: 'Xe điện', color: 'bg-emerald-500', from: '15k' },
+  { type: 'MOTORBIKE' as const, icon: Bike, label: 'Xe máy', color: 'bg-blue-500' },
+  { type: 'CAR' as const, icon: Car, label: 'Ô tô', color: 'bg-indigo-500' },
+  { type: 'ELECTRIC_CAR' as const, icon: Zap, label: 'Xe điện', color: 'bg-emerald-500' },
 ]
 
-export function QuickRideButton() {
+interface QuickRideButtonProps {
+  pricePerKm?: Record<string, number>
+}
+
+function formatRate(value?: number) {
+  if (!value) return null
+  return value % 1000 === 0 ? `${value / 1000}k` : value.toLocaleString('vi-VN')
+}
+
+export function QuickRideButton({ pricePerKm }: QuickRideButtonProps) {
   const router = useRouter()
   const { setSelectedVehicleType } = useRideStore()
 
@@ -42,7 +51,9 @@ export function QuickRideButton() {
               </div>
               <div className="text-center">
                 <p className="text-xs font-semibold text-slate-700">{v.label}</p>
-                <p className="text-[10px] text-slate-400">từ {v.from}/km</p>
+                {formatRate(pricePerKm?.[v.type]) && (
+                  <p className="text-[10px] text-slate-400">{formatRate(pricePerKm?.[v.type])}/km</p>
+                )}
               </div>
             </motion.button>
           )

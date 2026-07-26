@@ -11,12 +11,13 @@ import {
 } from '@/components/home/HomestayRestaurantSection'
 import { QuickRideButton } from '@/components/home/QuickRideButton'
 import { prisma } from '@/lib/prisma'
+import { getPricePerKm } from '@/lib/pricing'
 
 // Data comes from the database — don't try to prerender at build time
 export const dynamic = 'force-dynamic'
 
 async function getHomeData() {
-  const [attractions, homestays, restaurants] = await Promise.all([
+  const [attractions, homestays, restaurants, pricePerKm] = await Promise.all([
     prisma.location.findMany({
       where: { type: 'ATTRACTION' },
       orderBy: { viewCount: 'desc' },
@@ -32,12 +33,13 @@ async function getHomeData() {
       orderBy: { viewCount: 'desc' },
       take: 4,
     }),
+    getPricePerKm(),
   ])
-  return { attractions, homestays, restaurants }
+  return { attractions, homestays, restaurants, pricePerKm }
 }
 
 export default async function HomePage() {
-  const { attractions, homestays, restaurants } = await getHomeData()
+  const { attractions, homestays, restaurants, pricePerKm } = await getHomeData()
 
   return (
     <MobileShell>
@@ -47,7 +49,7 @@ export default async function HomePage() {
 
         {/* Quick Ride Button */}
         <div className="px-4 -mt-1 pt-4">
-          <QuickRideButton />
+          <QuickRideButton pricePerKm={pricePerKm} />
         </div>
 
         {/* Featured Spots */}

@@ -59,10 +59,11 @@ let res = await client.fetch('/api/rides', {
     pickupAddress: 'Thị trấn Cô Tô', dropoffAddress: 'Đỉnh Hải Đăng Cô Tô',
     dropoffName: 'Đỉnh Hải Đăng Cô Tô',
     distanceKm: 3.22, totalPrice: 58000, vehicleType: 'MOTORBIKE',
+    note: 'Đứng trước cổng chợ, gọi khi đến!',
   }),
 })
 const ride = await res.json()
-console.log('ride created:', ride.id, ride.status, '| watch at /ride/' + ride.id)
+console.log('ride created:', ride.id, ride.status, '| note:', ride.note, '| watch at /ride/' + ride.id)
 
 await sleep(8000)
 

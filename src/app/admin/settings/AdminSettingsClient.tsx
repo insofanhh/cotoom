@@ -78,9 +78,7 @@ export function AdminSettingsClient({ settings }: { settings: Record<string, str
         <div className="space-y-2">
           {['motorbike', 'car', 'electric'].map((type) => {
             const price = parseInt(values[`price_per_km_${type}`] ?? '0')
-            const baseFares: Record<string, number> = { motorbike: 10000, car: 20000, electric: 15000 }
-            const base = baseFares[type] ?? 0
-            const total = base + price * 3
+            const total = price * 3
             return (
               <div key={type} className="flex justify-between text-sm">
                 <span className="text-slate-500 capitalize">{type === 'motorbike' ? 'Xe máy' : type === 'car' ? 'Ô tô' : 'Xe điện'}</span>
