@@ -9,8 +9,9 @@ import bcrypt from 'bcryptjs'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// Load env
-config({ path: path.resolve(__dirname, '../.env.local'), override: true })
+// Load env — an explicitly-set DATABASE_URL (e.g. seeding a remote DB) wins over .env files
+const hasExplicitUrl = !!process.env.DATABASE_URL
+config({ path: path.resolve(__dirname, '../.env.local'), override: !hasExplicitUrl })
 config({ path: path.resolve(__dirname, '../.env') })
 
 // Dynamic import for the generated TS client via tsx
@@ -18,6 +19,7 @@ const { PrismaClient } = await import('../src/generated/prisma/client.ts')
 
 function parseConnectionString(url) {
   const parsed = new URL(url)
+  const useSsl = ['true', '1'].includes(parsed.searchParams.get('ssl') ?? '')
   return {
     host: parsed.hostname,
     port: parseInt(parsed.port || '3306'),
@@ -25,6 +27,7 @@ function parseConnectionString(url) {
     password: decodeURIComponent(parsed.password),
     database: parsed.pathname.slice(1),
     connectionLimit: 5,
+    ...(useSsl ? { ssl: { rejectUnauthorized: true } } : {}),
   }
 }
 
