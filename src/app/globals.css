@@ -1,0 +1,257 @@
+/* ─── Google Fonts ─────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ─── Ocean Color Palette ──────────────────────────────────── */
+:root {
+  /* Brand Ocean Blues */
+  --ocean-50: #eff8ff;
+  --ocean-100: #dbeffe;
+  --ocean-200: #bfe3fd;
+  --ocean-300: #92d1fc;
+  --ocean-400: #5cb8f9;
+  --ocean-500: #369af5;
+  --ocean-600: #207ce9;
+  --ocean-700: #1863d6;
+  --ocean-800: #1a51ad;
+  --ocean-900: #1c4688;
+
+  /* Cyan accent */
+  --cyan-400: #22d3ee;
+  --cyan-500: #06b6d4;
+
+  /* Sandy beige */
+  --sand-50: #fefce8;
+  --sand-100: #fef9c3;
+  --sand-200: #fef08a;
+  --sand-300: #fde047;
+  --sand-400: #facc15;
+
+  /* Coral accent */
+  --coral-400: #fb7185;
+  --coral-500: #f43f5e;
+
+  /* Shadcn / design tokens */
+  --background: oklch(0.98 0.005 230);
+  --foreground: oklch(0.15 0.02 240);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.15 0.02 240);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.15 0.02 240);
+  --primary: oklch(0.6 0.2 240);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.92 0.04 240);
+  --secondary-foreground: oklch(0.2 0.05 240);
+  --muted: oklch(0.94 0.02 240);
+  --muted-foreground: oklch(0.5 0.05 240);
+  --accent: oklch(0.88 0.08 200);
+  --accent-foreground: oklch(0.2 0.05 240);
+  --destructive: oklch(0.6 0.25 30);
+  --border: oklch(0.88 0.03 240);
+  --input: oklch(0.92 0.02 240);
+  --ring: oklch(0.6 0.2 240);
+  --radius: 0.75rem;
+
+  /* Mobile safe areas */
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --bottom-nav-height: 64px;
+}
+
+.dark {
+  --background: oklch(0.1 0.02 240);
+  --foreground: oklch(0.95 0.01 240);
+  --card: oklch(0.15 0.02 240);
+  --card-foreground: oklch(0.95 0.01 240);
+  --popover: oklch(0.15 0.02 240);
+  --popover-foreground: oklch(0.95 0.01 240);
+  --primary: oklch(0.65 0.2 240);
+  --primary-foreground: oklch(0.1 0 0);
+  --secondary: oklch(0.2 0.04 240);
+  --secondary-foreground: oklch(0.9 0.02 240);
+  --muted: oklch(0.2 0.02 240);
+  --muted-foreground: oklch(0.6 0.05 240);
+  --accent: oklch(0.25 0.06 200);
+  --accent-foreground: oklch(0.9 0.02 240);
+  --destructive: oklch(0.55 0.22 30);
+  --border: oklch(0.25 0.03 240);
+  --input: oklch(0.2 0.02 240);
+  --ring: oklch(0.65 0.2 240);
+}
+
+/* ─── Base ──────────────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Outfit', system-ui, sans-serif;
+}
+
+/* ─── Mobile Shell ──────────────────────────────────────────── */
+.mobile-shell {
+  max-width: 28rem;
+  margin-left: auto;
+  margin-right: auto;
+  min-height: 100svh;
+  background: var(--background);
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* ─── Ocean Gradient Hero ───────────────────────────────────── */
+.ocean-gradient {
+  background: linear-gradient(
+    135deg,
+    #1863d6 0%,
+    #369af5 40%,
+    #22d3ee 75%,
+    #06b6d4 100%
+  );
+}
+
+.ocean-gradient-soft {
+  background: linear-gradient(
+    160deg,
+    #eff8ff 0%,
+    #dbeffe 50%,
+    #bfe3fd 100%
+  );
+}
+
+/* ─── Glass Effect ──────────────────────────────────────────── */
+.glass {
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  background-color: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.glass-dark {
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  background-color: rgba(15, 30, 60, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ─── Bottom Navigation ─────────────────────────────────────── */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 28rem;
+  height: calc(var(--bottom-nav-height) + var(--safe-area-bottom));
+  padding-bottom: var(--safe-area-bottom);
+  z-index: 50;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(54, 154, 245, 0.15);
+  box-shadow: 0 -4px 24px rgba(24, 99, 214, 0.08);
+}
+
+/* ─── Content padding for bottom nav ───────────────────────── */
+.pb-nav {
+  padding-bottom: calc(var(--bottom-nav-height) + var(--safe-area-bottom) + 1rem);
+}
+
+/* ─── Cards ─────────────────────────────────────────────────── */
+.location-card {
+  background: white;
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(24, 99, 214, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.location-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(24, 99, 214, 0.16);
+}
+
+/* ─── Scrollbar hide ────────────────────────────────────────── */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* ─── Animations ────────────────────────────────────────────── */
+@keyframes wave {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1.2); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-wave {
+  animation: wave 1s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    #f0f4ff 25%,
+    #e0ecff 50%,
+    #f0f4ff 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ─── Shadcn base vars mapping ───────────────────────────────── */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}

@@ -1,0 +1,165 @@
+// CoToom — Prisma Schema (MySQL)
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+
+// ─────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────
+
+enum UserRole {
+  CLIENT
+  DRIVER
+  ADMIN
+}
+
+enum VehicleType {
+  MOTORBIKE
+  CAR
+  ELECTRIC_CAR
+}
+
+enum DriverStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum LocationType {
+  ATTRACTION
+  HOMESTAY
+  RESTAURANT
+}
+
+enum RideStatus {
+  SEARCHING
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// ─────────────────────────────────────────────
+// Models
+// ─────────────────────────────────────────────
+
+model User {
+  id            String        @id @default(cuid())
+  name          String
+  phone         String        @unique
+  passwordHash  String
+  role          UserRole      @default(CLIENT)
+  avatar        String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  driverProfile DriverProfile?
+  ridesAsClient Ride[]        @relation("ClientRides")
+  ridesAsDriver Ride[]        @relation("DriverRides")
+
+  @@map("users")
+}
+
+model DriverProfile {
+  id            String        @id @default(cuid())
+  userId        String        @unique
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  vehicleType   VehicleType
+  vehiclePlate  String
+  vehicleImage  String?
+  idPhotoFront  String?
+  idPhotoBack   String?
+  portrait      String?
+
+  ratingAvg     Float         @default(0)
+  totalTrips    Int           @default(0)
+  totalRevenue  Float         @default(0)
+
+  isOnline      Boolean       @default(false)
+  isBusy        Boolean       @default(false)
+  status        DriverStatus  @default(PENDING_APPROVAL)
+
+  latitude      Float?
+  longitude     Float?
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@map("driver_profiles")
+}
+
+model Location {
+  id            String        @id @default(cuid())
+  name          String
+  type          LocationType
+  description   String        @db.Text
+  images        Json          // String[] array of image paths
+  latitude      Float
+  longitude     Float
+  priceRange    String?       // e.g. "200.000 - 500.000 VND"
+  contactPhone  String?
+  viewCount     Int           @default(0)
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@map("locations")
+}
+
+model Ride {
+  id              String      @id @default(cuid())
+  clientId        String
+  client          User        @relation("ClientRides", fields: [clientId], references: [id])
+  driverId        String?
+  driver          User?       @relation("DriverRides", fields: [driverId], references: [id])
+
+  pickupLat       Float
+  pickupLng       Float
+  dropoffLat      Float
+  dropoffLng      Float
+  pickupAddress   String?
+  dropoffAddress  String?
+  dropoffName     String?     // Name of destination location
+
+  distanceKm      Float
+  totalPrice      Float
+  vehicleType     VehicleType
+
+  status          RideStatus  @default(SEARCHING)
+  acceptToken     String?     @unique // Secure token for driver acceptance link
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  review          Review?
+
+  @@map("rides")
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  rideId    String   @unique
+  ride      Ride     @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  rating    Int      // 1-5
+  comment   String?  @db.Text
+  createdAt DateTime @default(now())
+
+  @@map("reviews")
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+
+  @@map("settings")
+}
