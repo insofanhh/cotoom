@@ -12,6 +12,7 @@ import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { getPusherClient } from '@/lib/pusher'
 import { ensurePushSubscription } from '@/lib/push-client'
+import { PushPrompt } from '@/components/PushPrompt'
 
 interface DriverProfile {
   isOnline: boolean
@@ -94,6 +95,7 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
     stopAlert()
     const ring = () => {
       const ctx = audioCtxRef.current
+      if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {})
       if (ctx && ctx.state === 'running') {
         // Two-tone chime, Grab-style
         ;[0, 0.18].forEach((offset, i) => {
@@ -115,6 +117,14 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
   }, [stopAlert])
 
   useEffect(() => () => stopAlert(), [stopAlert])
+
+  // Unlock audio on the FIRST tap anywhere — not only the online toggle.
+  // Without this, a driver who loads the page already online never gets sound.
+  useEffect(() => {
+    const unlock = () => ensureAudioContext()
+    window.addEventListener('pointerdown', unlock, { once: true })
+    return () => window.removeEventListener('pointerdown', unlock)
+  }, [ensureAudioContext])
 
   const dismissIncoming = useCallback(() => {
     stopAlert()
@@ -309,6 +319,9 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
       </div>
 
       <div className="px-4 pt-4 pb-10 space-y-4">
+        {/* Push notification status */}
+        {!isPending && !isRejected && <PushPrompt />}
+
         {/* Pending notice */}
         {isPending && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">

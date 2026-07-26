@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
+import { PushPrompt } from '@/components/PushPrompt'
 
 interface ProfileUser {
   id: string
@@ -59,6 +60,11 @@ export function ProfileClient({ user }: { user: ProfileUser }) {
             {roleLabel[user.role] ?? user.role}
           </div>
         </motion.div>
+      </div>
+
+      {/* Push notifications */}
+      <div className="px-4 mb-4">
+        <PushPrompt />
       </div>
 
       {/* Menu items */}
