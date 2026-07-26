@@ -1,4 +1,5 @@
 import { BottomNav } from './BottomNav'
+import { InstallPrompt } from '@/components/InstallPrompt'
 import { cn } from '@/lib/utils'
 
 interface MobileShellProps {
@@ -32,6 +33,7 @@ export function MobileShell({
       >
         {children}
         {withBottomNav && <BottomNav />}
+        <InstallPrompt />
       </main>
     </div>
   )

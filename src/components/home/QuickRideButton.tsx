@@ -31,7 +31,7 @@ export function QuickRideButton({ pricePerKm }: QuickRideButtonProps) {
 
   return (
     <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl p-4 border border-blue-100">
-      <p className="text-sm font-semibold text-slate-700 mb-3">🚀 Đặt xe ngay</p>
+      <p className="text-sm font-semibold text-slate-700 mb-3">Đặt xe ngay</p>
       <div className="grid grid-cols-3 gap-2">
         {vehicles.map((v, i) => {
           const Icon = v.icon
