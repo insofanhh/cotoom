@@ -43,7 +43,14 @@ export const metadata: Metadata = {
       { url: '/splash/1536x2048.png', media: '(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)' },
       { url: '/splash/1668x2388.png', media: '(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)' },
       { url: '/splash/2048x2732.png', media: '(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)' },
+      // Fallback for devices whose exact dimensions are not listed above
+      { url: '/splash/1320x2868.png' },
     ],
+  },
+  other: {
+    // Next only emits the modern mobile-web-app-capable tag, but iOS ties
+    // startup images to the legacy apple- prefixed one
+    'apple-mobile-web-app-capable': 'yes',
   },
 }
 
