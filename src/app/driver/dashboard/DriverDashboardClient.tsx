@@ -385,14 +385,23 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
                 <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center shrink-0">
                   <User className="text-slate-500" size={20} />
                 </div>
-                <div>
-                  <p className="font-bold text-slate-800">{activeRide.client?.name || 'Khách hàng'}</p>
+                <div className="min-w-0">
+                  <p className="font-bold text-slate-800 truncate">{activeRide.client?.name || 'Khách hàng'}</p>
                   <div className="flex items-center gap-1 text-slate-500 text-sm">
                     <Phone size={12} />
                     <span>{activeRide.client?.phone || 'Chưa cập nhật số ĐT'}</span>
                   </div>
                 </div>
-                <div className="ml-auto text-right">
+                <div className="ml-auto flex items-center gap-3 shrink-0">
+                  {activeRide.client?.phone && (
+                    <a
+                      href={`tel:${activeRide.client.phone}`}
+                      aria-label="Gọi cho khách"
+                      className="w-11 h-11 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center shadow-md active:scale-95 transition-transform"
+                    >
+                      <Phone size={18} />
+                    </a>
+                  )}
                   <p className="font-bold text-emerald-600 text-lg">{formatVND(activeRide.totalPrice)}</p>
                 </div>
               </div>
