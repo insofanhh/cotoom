@@ -7,6 +7,7 @@ type RideFlowState =
   | 'PREVIEW'
   | 'SEARCHING'
   | 'DRIVER_FOUND'
+  | 'ARRIVED'
   | 'IN_PROGRESS'
   | 'COMPLETED'
   | 'ERROR'

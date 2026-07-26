@@ -20,7 +20,7 @@ export default async function DriverDashboardPage() {
   const activeRide = await prisma.ride.findFirst({
     where: {
       driverId: session.user.id,
-      status: { in: ['ACCEPTED', 'IN_PROGRESS'] }
+      status: { in: ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'] }
     },
     include: { client: { select: { name: true, phone: true } } }
   })

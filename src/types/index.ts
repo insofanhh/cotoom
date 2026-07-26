@@ -32,9 +32,10 @@ declare module 'next-auth/jwt' {
 }
 
 // Ride types
-export type RideStatus = 
+export type RideStatus =
   | 'SEARCHING'
   | 'ACCEPTED'
+  | 'ARRIVED'
   | 'IN_PROGRESS'
   | 'COMPLETED'
   | 'CANCELLED'
@@ -58,6 +59,7 @@ export interface RideBooking {
   distanceKm: number
   totalPrice: number
   vehicleType: VehicleType
+  durationMin?: number
 }
 
 export interface DriverInfo {

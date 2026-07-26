@@ -109,6 +109,20 @@ export function RideFlow() {
     setPrefilledDestination({ lat, lng, address, name })
   }, [setPrefilledDestination])
 
+  // OSRM routed distance is the real road distance — replace the straight-line
+  // estimate with it while the user is still previewing (never after booking)
+  const handleRouteFound = useCallback((distanceKm: number, durationMin: number) => {
+    const { flowState: state, booking: current, selectedVehicleType: vehicle } = useRideStore.getState()
+    if (state !== 'PREVIEW' || !current) return
+    const price = baseFare[vehicle] + distanceKm * pricePerKm[vehicle]
+    setBooking({
+      ...current,
+      distanceKm: parseFloat(distanceKm.toFixed(2)),
+      totalPrice: Math.round(price / 1000) * 1000,
+      durationMin: Math.max(1, Math.round(durationMin)),
+    })
+  }, [setBooking])
+
   // When destination is prefilled, start locating immediately
   useEffect(() => {
     if (prefilledDestination && flowState === 'IDLE') {
@@ -136,7 +150,7 @@ export function RideFlow() {
 
   // Listen to Pusher for driver acceptance when SEARCHING
   useEffect(() => {
-    if ((flowState !== 'SEARCHING' && flowState !== 'DRIVER_FOUND' && flowState !== 'IN_PROGRESS') || !activeRideId) return
+    if ((flowState !== 'SEARCHING' && flowState !== 'DRIVER_FOUND' && flowState !== 'ARRIVED' && flowState !== 'IN_PROGRESS') || !activeRideId) return
 
     const pusher = getPusherClient()
     const channelName = `presence-ride-${activeRideId}`
@@ -157,7 +171,15 @@ export function RideFlow() {
       setFlowState('DRIVER_FOUND')
     })
     
+    channel.bind('driver:location', (data: { latitude: number; longitude: number }) => {
+      const { driverInfo: current } = useRideStore.getState()
+      if (current) {
+        setDriverInfo({ ...current, latitude: data.latitude, longitude: data.longitude })
+      }
+    })
+
     channel.bind('ride:status-update', (data: any) => {
+      if (data.status === 'ARRIVED') setFlowState('ARRIVED')
       if (data.status === 'IN_PROGRESS') setFlowState('IN_PROGRESS')
       if (data.status === 'COMPLETED') setFlowState('COMPLETED')
       if (data.status === 'CANCELLED') {
@@ -303,6 +325,7 @@ export function RideFlow() {
           dropoffLng={booking?.dropoffLng ?? prefilledDestination?.lng}
           searchInputRef={searchInputRef}
           onLocationSelect={handleLocationSelect}
+          onRouteFound={handleRouteFound}
           locations={locations}
           clientLocation={clientLocation ?? undefined}
           drivers={driverInfo && driverInfo.latitude && driverInfo.longitude ? [{
@@ -476,6 +499,37 @@ export function RideFlow() {
             </motion.div>
           )}
 
+          {/* ARRIVED — driver is waiting at the pickup point */}
+          {flowState === 'ARRIVED' && driverInfo && (
+            <motion.div
+              key="arrived"
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl p-5"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <MapPin size={20} className="text-cyan-500" />
+                <p className="font-outfit font-bold text-slate-800">Tài xế đã đến điểm đón!</p>
+              </div>
+              <div className="flex items-center gap-4 bg-cyan-50 rounded-2xl p-4 mb-2">
+                <div className="w-12 h-12 rounded-full bg-cyan-200 flex items-center justify-center text-2xl flex-shrink-0">
+                  🧑‍✈️
+                </div>
+                <div className="flex-1">
+                  <p className="font-bold text-slate-800">{driverInfo.name}</p>
+                  <p className="text-slate-500 text-sm">{driverInfo.plate} • {vehicleLabels[driverInfo.vehicleType]}</p>
+                </div>
+                <a
+                  href={`tel:${driverInfo.phone}`}
+                  className="w-11 h-11 rounded-full bg-cyan-500 text-white flex items-center justify-center shadow"
+                >
+                  📞
+                </a>
+              </div>
+              <p className="text-slate-500 text-sm text-center">Vui lòng ra điểm đón, tài xế đang chờ bạn.</p>
+            </motion.div>
+          )}
+
           {/* IN_PROGRESS */}
           {flowState === 'IN_PROGRESS' && driverInfo && (
             <motion.div
@@ -617,7 +671,20 @@ export function RideFlow() {
               <div className="bg-slate-50 rounded-xl p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">Khoảng cách</span>
-                  <span className="font-medium">{booking.distanceKm.toFixed(1)} km</span>
+                  <span className="font-medium">
+                    {booking.distanceKm.toFixed(1)} km
+                    {!booking.durationMin && (
+                      <span className="text-slate-400 font-normal"> (ước tính)</span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Thời gian dự kiến</span>
+                  <span className="font-medium">
+                    {booking.durationMin
+                      ? `~${booking.durationMin} phút`
+                      : 'Đang tính lộ trình...'}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">Phương tiện</span>

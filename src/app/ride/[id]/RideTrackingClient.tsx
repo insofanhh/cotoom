@@ -31,7 +31,7 @@ export default function RideTrackingClient({ initialRide }: RideTrackingClientPr
 
   useEffect(() => {
     // Only poll if ride is active
-    if (ride.status !== 'SEARCHING' && ride.status !== 'ACCEPTED' && ride.status !== 'IN_PROGRESS') return
+    if (!['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(ride.status)) return
 
     // Realtime updates via Pusher; polling below stays as fallback
     const pusher = getPusherClient()
@@ -40,11 +40,32 @@ export default function RideTrackingClient({ initialRide }: RideTrackingClientPr
     channel.bind('ride:driver-found', refreshRide)
     channel.bind('ride:status-update', refreshRide)
 
+    // Live driver position — merge into local state, no refetch needed
+    const onDriverLocation = (data: { latitude: number; longitude: number }) => {
+      setRide((prev: any) =>
+        prev.driver
+          ? {
+              ...prev,
+              driver: {
+                ...prev.driver,
+                driverProfile: {
+                  ...prev.driver.driverProfile,
+                  latitude: data.latitude,
+                  longitude: data.longitude,
+                },
+              },
+            }
+          : prev
+      )
+    }
+    channel.bind('driver:location', onDriverLocation)
+
     const interval = setInterval(refreshRide, 30000)
 
     return () => {
       channel.unbind('ride:driver-found', refreshRide)
       channel.unbind('ride:status-update', refreshRide)
+      channel.unbind('driver:location', onDriverLocation)
       pusher.unsubscribe(channelName)
       clearInterval(interval)
     }
@@ -101,7 +122,7 @@ export default function RideTrackingClient({ initialRide }: RideTrackingClientPr
           pickupLng={routePickupLng}
           dropoffLat={routeDropoffLat}
           dropoffLng={routeDropoffLng}
-          drivers={ride.status === 'ACCEPTED' || ride.status === 'IN_PROGRESS' ? drivers : []}
+          drivers={['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(ride.status) ? drivers : []}
         />
       </div>
 
@@ -131,8 +152,9 @@ export default function RideTrackingClient({ initialRide }: RideTrackingClientPr
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-xl font-bold text-slate-800 font-outfit">
-                  {ride.status === 'ACCEPTED' ? 'Tài xế đang đến' : 
-                   ride.status === 'IN_PROGRESS' ? 'Đang trên đường' : 
+                  {ride.status === 'ACCEPTED' ? 'Tài xế đang đến' :
+                   ride.status === 'ARRIVED' ? 'Tài xế đã đến điểm đón' :
+                   ride.status === 'IN_PROGRESS' ? 'Đang trên đường' :
                    formatRideStatus(ride.status)}
                 </h2>
                 <p className="text-sm text-slate-500 mt-0.5">

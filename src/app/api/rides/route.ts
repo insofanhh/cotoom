@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { generateToken } from '@/lib/utils'
+import { generateToken, calculateDistance } from '@/lib/utils'
 import { pusherServer } from '@/lib/pusher'
 
 export async function POST(req: NextRequest) {
@@ -56,9 +56,14 @@ export async function POST(req: NextRequest) {
 type RideRecord = {
   id: string
   vehicleType: string
+  pickupLat: number
+  pickupLng: number
+  dropoffLat: number
+  dropoffLng: number
   pickupAddress: string | null
   dropoffAddress: string | null
   dropoffName: string | null
+  distanceKm: number
   totalPrice: number
 }
 
@@ -96,12 +101,32 @@ async function dispatchDrivers(ride: RideRecord, acceptToken: string) {
     vehicleType: ride.vehicleType,
     pickup: ride.pickupAddress || 'Vị trí hiện tại',
     dropoff: ride.dropoffAddress || ride.dropoffName || 'Điểm đến',
+    pickupLat: ride.pickupLat,
+    pickupLng: ride.pickupLng,
+    dropoffLat: ride.dropoffLat,
+    dropoffLng: ride.dropoffLng,
+    rideKm: ride.distanceKm,
     price: ride.totalPrice || 0,
   }
 
-  await Promise.allSettled(
-    drivers.map((driver) =>
-      pusherServer.trigger(`private-driver-${driver.user.id}`, 'ride:new-request', payload)
-    )
+  const results = await Promise.allSettled(
+    drivers.map((driver) => {
+      // Each driver sees how far away the pickup point is from them
+      const distanceToPickupKm =
+        driver.latitude != null && driver.longitude != null
+          ? parseFloat(
+              calculateDistance(driver.latitude, driver.longitude, ride.pickupLat, ride.pickupLng).toFixed(1)
+            )
+          : null
+      return pusherServer.trigger(`private-driver-${driver.user.id}`, 'ride:new-request', {
+        ...payload,
+        distanceToPickupKm,
+      })
+    })
   )
+  results.forEach((r, i) => {
+    if (r.status === 'rejected') {
+      console.error(`[dispatch] notify driver ${drivers[i].user.id} failed:`, r.reason)
+    }
+  })
 }

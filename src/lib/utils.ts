@@ -62,6 +62,7 @@ export function formatRideStatus(status: string): string {
   const map: Record<string, string> = {
     SEARCHING: 'Đang tìm tài xế',
     ACCEPTED: 'Tài xế đang đến',
+    ARRIVED: 'Tài xế đã đến',
     IN_PROGRESS: 'Đang trên đường',
     COMPLETED: 'Hoàn thành',
     CANCELLED: 'Đã hủy',

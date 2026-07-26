@@ -18,6 +18,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     const ride = await prisma.ride.findUnique({
       where: { id },
       include: {
+        client: { select: { name: true, phone: true } },
         driver: {
           select: {
             id: true,

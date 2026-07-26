@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Waves, Power, Star, Car, TrendingUp, DollarSign, Route, Bell, ChevronLeft, AlertCircle, MapPin, Navigation, User, Phone, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -36,13 +36,71 @@ const vehicleLabels: Record<string, string> = {
   ELECTRIC_CAR: 'Xe điện',
 }
 
+const INCOMING_TIMEOUT_SECONDS = 20
+
 export function DriverDashboardClient({ profile, userId, userName, initialActiveRide }: Props) {
   const [localProfile, setLocalProfile] = useState(profile)
   const [isOnline, setIsOnline] = useState(profile.isOnline)
   const [toggling, setToggling] = useState(false)
   const [incomingRide, setIncomingRide] = useState<any>(null)
+  const [incomingCountdown, setIncomingCountdown] = useState(INCOMING_TIMEOUT_SECONDS)
   const [activeRide, setActiveRide] = useState<any>(initialActiveRide || null)
   const router = useRouter()
+
+  // ── Ring + vibrate while a ride request is on screen ──────────────────
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const alertIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // AudioContext must be created during a user gesture (autoplay policy) —
+  // we do it when the driver taps the online toggle
+  const ensureAudioContext = useCallback(() => {
+    try {
+      if (!audioCtxRef.current) {
+        const Ctx = window.AudioContext || (window as any).webkitAudioContext
+        if (Ctx) audioCtxRef.current = new Ctx()
+      }
+      audioCtxRef.current?.resume().catch(() => {})
+    } catch {}
+  }, [])
+
+  const stopAlert = useCallback(() => {
+    if (alertIntervalRef.current) {
+      clearInterval(alertIntervalRef.current)
+      alertIntervalRef.current = null
+    }
+    try { navigator.vibrate?.(0) } catch {}
+  }, [])
+
+  const startAlert = useCallback(() => {
+    stopAlert()
+    const ring = () => {
+      const ctx = audioCtxRef.current
+      if (ctx && ctx.state === 'running') {
+        // Two-tone chime, Grab-style
+        ;[0, 0.18].forEach((offset, i) => {
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
+          osc.type = 'sine'
+          osc.frequency.value = i === 0 ? 880 : 1174
+          gain.gain.setValueAtTime(0.35, ctx.currentTime + offset)
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + offset + 0.35)
+          osc.connect(gain).connect(ctx.destination)
+          osc.start(ctx.currentTime + offset)
+          osc.stop(ctx.currentTime + offset + 0.4)
+        })
+      }
+      try { navigator.vibrate?.([400, 150, 400]) } catch {}
+    }
+    ring()
+    alertIntervalRef.current = setInterval(ring, 1500)
+  }, [stopAlert])
+
+  useEffect(() => () => stopAlert(), [stopAlert])
+
+  const dismissIncoming = useCallback(() => {
+    stopAlert()
+    setIncomingRide(null)
+  }, [stopAlert])
 
   useEffect(() => {
     if (!isOnline) return
@@ -53,6 +111,8 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
 
     channel.bind('ride:new-request', (data: any) => {
       setIncomingRide(data)
+      setIncomingCountdown(INCOMING_TIMEOUT_SECONDS)
+      startAlert()
       toast('Có chuyến xe mới!', {
         description: `Từ ${data.pickup} đến ${data.dropoff}`,
         icon: '🔔',
@@ -63,10 +123,50 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
       channel.unbind('ride:new-request')
       pusher.unsubscribe(channelName)
     }
-  }, [isOnline, userId])
+  }, [isOnline, userId, startAlert])
+
+  // Stream GPS position while online — server relays it to the active ride channel
+  useEffect(() => {
+    if (!isOnline || typeof navigator === 'undefined' || !navigator.geolocation) return
+    let lastSent = 0
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const now = Date.now()
+        if (now - lastSent < 4000) return
+        lastSent = now
+        fetch('/api/driver/location', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          }),
+        }).catch(() => {})
+      },
+      () => {}, // silently ignore GPS errors — next fix will retry
+      { enableHighAccuracy: true, maximumAge: 3000 }
+    )
+    return () => navigator.geolocation.clearWatch(watchId)
+  }, [isOnline])
+
+  // Countdown — auto-dismiss the request when it hits zero
+  useEffect(() => {
+    if (!incomingRide) return
+    const interval = setInterval(() => {
+      setIncomingCountdown((c) => {
+        if (c <= 1) {
+          dismissIncoming()
+          return 0
+        }
+        return c - 1
+      })
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [incomingRide, dismissIncoming])
 
   const acceptRide = async () => {
     if (!incomingRide) return
+    stopAlert()
     setToggling(true)
     try {
       const res = await fetch(`/api/rides/${incomingRide.rideId}/accept`, {
@@ -75,21 +175,29 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
         body: JSON.stringify({ acceptToken: incomingRide.acceptToken }),
       })
       if (!res.ok) throw new Error('Không thể nhận chuyến')
-      
-      
+
       toast.success('Đã nhận chuyến thành công!')
-      
-      // Update active ride state directly from response or re-fetch
+
+      // Optimistic card from the notification payload, then hydrate with full ride
       setActiveRide({
         id: incomingRide.rideId,
         status: 'ACCEPTED',
         pickupAddress: incomingRide.pickup,
         dropoffAddress: incomingRide.dropoff,
         dropoffName: incomingRide.dropoff,
+        pickupLat: incomingRide.pickupLat,
+        pickupLng: incomingRide.pickupLng,
+        dropoffLat: incomingRide.dropoffLat,
+        dropoffLng: incomingRide.dropoffLng,
         totalPrice: incomingRide.price,
-        client: { name: 'Khách hàng' } // We can fetch full client info later
+        client: { name: 'Khách hàng' },
       })
       setIncomingRide(null)
+
+      try {
+        const full = await fetch(`/api/rides/${incomingRide.rideId}`)
+        if (full.ok) setActiveRide(await full.json())
+      } catch {}
     } catch (err) {
       toast.error('Chuyến xe không còn khả dụng hoặc có lỗi xảy ra.')
       setIncomingRide(null)
@@ -131,6 +239,7 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
   }
 
   const toggleOnline = async () => {
+    ensureAudioContext() // user gesture — unlock audio for ride alerts
     setToggling(true)
     try {
       const res = await fetch('/api/driver/status', {
@@ -245,7 +354,9 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
             <div className="bg-blue-500 p-4 text-white">
               <h2 className="font-bold text-lg">Chuyến xe đang thực hiện</h2>
               <p className="text-blue-100 text-sm mt-0.5">
-                {activeRide.status === 'ACCEPTED' ? 'Đang trên đường đón khách' : 'Đang chở khách đến nơi'}
+                {activeRide.status === 'ACCEPTED' ? 'Đang trên đường đón khách' :
+                 activeRide.status === 'ARRIVED' ? 'Đã đến điểm đón — chờ khách' :
+                 'Đang chở khách đến nơi'}
               </p>
             </div>
             
@@ -283,9 +394,35 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
                 </div>
               </div>
 
-              <div className="pt-4 grid gap-2">
+              {/* Navigation deep link — to pickup before the trip, to dropoff during it */}
+              {(() => {
+                const navLat = activeRide.status === 'IN_PROGRESS' ? activeRide.dropoffLat : activeRide.pickupLat
+                const navLng = activeRide.status === 'IN_PROGRESS' ? activeRide.dropoffLng : activeRide.pickupLng
+                if (navLat == null || navLng == null) return null
+                return (
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${navLat},${navLng}&travelmode=driving`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl py-3 font-semibold text-sm"
+                  >
+                    <Navigation size={16} className="text-blue-500" />
+                    Dẫn đường đến {activeRide.status === 'IN_PROGRESS' ? 'điểm trả khách' : 'điểm đón'}
+                  </a>
+                )
+              })()}
+
+              <div className="pt-2 grid gap-2">
                 {activeRide.status === 'ACCEPTED' ? (
-                  <Button 
+                  <Button
+                    className="w-full bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl py-6 font-bold"
+                    onClick={() => updateRideStatus('ARRIVED')}
+                    disabled={toggling}
+                  >
+                    Đã đến điểm đón
+                  </Button>
+                ) : activeRide.status === 'ARRIVED' ? (
+                  <Button
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-6 font-bold"
                     onClick={() => updateRideStatus('IN_PROGRESS')}
                     disabled={toggling}
@@ -293,7 +430,7 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
                     Đã đón được khách
                   </Button>
                 ) : (
-                  <Button 
+                  <Button
                     className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl py-6 font-bold flex items-center gap-2"
                     onClick={() => updateRideStatus('COMPLETED')}
                     disabled={toggling}
@@ -320,11 +457,41 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
           </div>
         ) : incomingRide ? (
           <div className="bg-emerald-50 rounded-2xl p-4 shadow-sm border border-emerald-200 animate-in fade-in slide-in-from-bottom-4">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
-              <p className="font-bold text-emerald-800 text-base">Có chuyến xe mới!</p>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
+                <p className="font-bold text-emerald-800 text-base">Có chuyến xe mới!</p>
+              </div>
+              {/* Countdown ring */}
+              <div className="relative w-11 h-11">
+                <svg className="w-11 h-11 -rotate-90" viewBox="0 0 44 44">
+                  <circle cx="22" cy="22" r="18" fill="none" stroke="#d1fae5" strokeWidth="4" />
+                  <circle
+                    cx="22" cy="22" r="18" fill="none"
+                    stroke={incomingCountdown <= 5 ? '#ef4444' : '#10b981'}
+                    strokeWidth="4" strokeLinecap="round"
+                    strokeDasharray={`${(incomingCountdown / INCOMING_TIMEOUT_SECONDS) * 113} 113`}
+                    style={{ transition: 'stroke-dasharray 1s linear' }}
+                  />
+                </svg>
+                <span className={cn(
+                  'absolute inset-0 flex items-center justify-center font-bold text-sm',
+                  incomingCountdown <= 5 ? 'text-red-500' : 'text-emerald-700'
+                )}>
+                  {incomingCountdown}
+                </span>
+              </div>
             </div>
-            
+
+            {incomingRide.distanceToPickupKm != null && (
+              <div className="flex items-center gap-1.5 mb-3 bg-white rounded-lg px-3 py-2 border border-emerald-100 w-fit">
+                <MapPin size={13} className="text-emerald-600" />
+                <span className="text-sm font-semibold text-emerald-700">
+                  Cách bạn {incomingRide.distanceToPickupKm} km
+                </span>
+              </div>
+            )}
+
             <div className="space-y-3 mb-4 bg-white rounded-xl p-3 border border-emerald-100">
               <div className="flex items-start gap-2">
                 <MapPin className="text-emerald-500 mt-0.5 shrink-0" size={16} />
@@ -341,18 +508,33 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
                 </div>
               </div>
               <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                <p className="text-xs text-slate-500">Thu nhập dự kiến</p>
+                <div className="flex items-center gap-3">
+                  <p className="text-xs text-slate-500">Thu nhập dự kiến</p>
+                  {incomingRide.rideKm != null && (
+                    <span className="text-xs text-slate-400">• Lộ trình {Number(incomingRide.rideKm).toFixed(1)} km</span>
+                  )}
+                </div>
                 <p className="font-bold text-emerald-600 text-lg">{formatVND(incomingRide.price)}</p>
               </div>
             </div>
 
-            <Button 
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold py-6 shadow-md"
-              onClick={acceptRide}
-              disabled={toggling}
-            >
-              {toggling ? 'Đang nhận chuyến...' : 'Nhận chuyến ngay'}
-            </Button>
+            <div className="grid gap-2">
+              <Button
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold py-6 shadow-md"
+                onClick={acceptRide}
+                disabled={toggling}
+              >
+                {toggling ? 'Đang nhận chuyến...' : `Nhận chuyến ngay (${incomingCountdown}s)`}
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full text-slate-400 rounded-xl"
+                onClick={dismissIncoming}
+                disabled={toggling}
+              >
+                Bỏ qua
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">

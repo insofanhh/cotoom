@@ -15,6 +15,7 @@ interface LeafletMapCoreProps {
   dropoffLng?: number
   searchInputRef?: React.RefObject<HTMLDivElement | null>
   onLocationSelect?: (lat: number, lng: number, address: string, name: string) => void
+  onRouteFound?: (distanceKm: number, durationMin: number) => void
   locations?: any[]
   clientLocation?: { lat: number, lng: number }
   drivers?: any[]
@@ -68,16 +69,18 @@ const driverIcon = L.divIcon({
   iconAnchor: [16, 16]
 })
 
-export default function LeafletMapCore({ pickupLat, pickupLng, dropoffLat, dropoffLng, searchInputRef, onLocationSelect, locations, clientLocation, drivers }: LeafletMapCoreProps) {
+export default function LeafletMapCore({ pickupLat, pickupLng, dropoffLat, dropoffLng, searchInputRef, onLocationSelect, onRouteFound, locations, clientLocation, drivers }: LeafletMapCoreProps) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
   const markersRef = useRef<L.Marker[]>([])
   const routingControlRef = useRef<any>(null)
   const onLocationSelectRef = useRef(onLocationSelect)
+  const onRouteFoundRef = useRef(onRouteFound)
 
   useEffect(() => {
     onLocationSelectRef.current = onLocationSelect
-  }, [onLocationSelect])
+    onRouteFoundRef.current = onRouteFound
+  }, [onLocationSelect, onRouteFound])
 
   // Init Map
   useEffect(() => {
@@ -229,9 +232,16 @@ export default function LeafletMapCore({ pickupLat, pickupLng, dropoffLat, dropo
         })
           .on('routesfound', (e: any) => {
             const liveMap = mapInstance.current
-            const coords = e.routes?.[0]?.coordinates
+            const route = e.routes?.[0]
+            const coords = route?.coordinates
             if (liveMap && coords?.length) {
               try { liveMap.fitBounds(L.latLngBounds(coords), { padding: [40, 40] }) } catch (err) {}
+            }
+            // Report real routed distance/duration (OSRM) for accurate pricing & ETA
+            if (route?.summary) {
+              const km = route.summary.totalDistance / 1000
+              const min = route.summary.totalTime / 60
+              onRouteFoundRef.current?.(km, min)
             }
           })
           .addTo(map)

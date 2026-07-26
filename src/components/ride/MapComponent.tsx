@@ -21,6 +21,7 @@ interface MapComponentProps {
   dropoffLng?: number
   searchInputRef?: React.RefObject<HTMLDivElement | null>
   onLocationSelect?: (lat: number, lng: number, address: string, name: string) => void
+  onRouteFound?: (distanceKm: number, durationMin: number) => void
   locations?: any[]
   clientLocation?: { lat: number, lng: number }
   drivers?: any[]

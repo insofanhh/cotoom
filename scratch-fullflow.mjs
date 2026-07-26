@@ -74,7 +74,25 @@ res = await driver.fetch(`/api/rides/${ride.id}/accept`, {
 })
 console.log('accept:', res.status, JSON.stringify(await res.json()))
 
-await sleep(7000)
+await sleep(5000)
+
+// 2b. Driver reports GPS position (should relay to the ride channel)
+res = await driver.fetch('/api/driver/location', {
+  method: 'PATCH',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ latitude: 20.975, longitude: 107.762 }),
+})
+console.log('location ping:', res.status)
+
+// 2c. Driver arrives at pickup
+res = await driver.fetch(`/api/rides/${ride.id}/status`, {
+  method: 'PATCH',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ status: 'ARRIVED' }),
+})
+console.log('arrived:', res.status)
+
+await sleep(5000)
 
 // 3. Driver starts the trip
 res = await driver.fetch(`/api/rides/${ride.id}/status`, {

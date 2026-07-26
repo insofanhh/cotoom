@@ -42,6 +42,7 @@ enum LocationType {
 enum RideStatus {
   SEARCHING
   ACCEPTED
+  ARRIVED
   IN_PROGRESS
   COMPLETED
   CANCELLED

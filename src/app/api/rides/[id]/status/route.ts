@@ -19,7 +19,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const body = await req.json()
     const { status }: { status: RideStatus } = body
 
-    if (!['IN_PROGRESS', 'COMPLETED', 'CANCELLED'].includes(status)) {
+    if (!['ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'].includes(status)) {
       return NextResponse.json({ message: 'Invalid status' }, { status: 400 })
     }
 
