@@ -1,5 +1,5 @@
 // Full ride lifecycle: client books, driver accepts, drives, completes; client reviews.
-const BASE = 'http://localhost:3000'
+const BASE = process.env.BASE_URL || 'http://localhost:3000'
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 function makeSession() {
@@ -37,6 +37,15 @@ function makeSession() {
 
 const client = makeSession()
 const driver = makeSession()
+
+// Ensure the test client account exists (idempotent — 409/400 if already registered)
+const reg = await fetch(`${BASE}/api/auth/register`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ name: 'Khách Test', phone: '0911222333', password: 'test1234' }),
+})
+console.log('register client:', reg.status)
+
 await client.login('0911222333', 'test1234')
 await driver.login('0944555666', 'driver123')
 
