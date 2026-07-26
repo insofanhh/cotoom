@@ -16,8 +16,9 @@ export async function POST() {
     })
 
     if (subscriptions > 0) {
+      // No app name in the title — iOS already appends "from CoToom" itself
       await sendPushToUser(session.user.id, {
-        title: '🔔 Thông báo thử từ CoToom',
+        title: '🔔 Thông báo thử',
         body: 'Tuyệt vời! Thiết bị của bạn đã nhận được thông báo đẩy.',
         url: '/',
         tag: 'push-test',

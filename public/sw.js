@@ -16,10 +16,12 @@ self.addEventListener('push', (event) => {
   try {
     data = event.data ? event.data.json() : {}
   } catch {
-    data = { title: 'CoToom', body: event.data ? event.data.text() : '' }
+    data = { body: event.data ? event.data.text() : '' }
   }
 
-  const title = data.title || 'CoToom'
+  // No app name in the fallback title — the OS already attributes
+  // the notification to CoToom (iOS shows "from CoToom" on its own)
+  const title = data.title || 'Thông báo mới'
   const options = {
     body: data.body || '',
     icon: '/icons/icon-192.png',
