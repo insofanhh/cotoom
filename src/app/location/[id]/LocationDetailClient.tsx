@@ -46,14 +46,15 @@ interface Location {
 
 interface Props {
   location: Location
-  adminZaloPhone: string
 }
 
-export function LocationDetailClient({ location, adminZaloPhone }: Props) {
+export function LocationDetailClient({ location }: Props) {
   const router = useRouter()
   const { setPrefilledDestination, setSelectedVehicleType } = useRideStore()
   const [activeImage, setActiveImage] = useState(0)
   const [showLightbox, setShowLightbox] = useState(false)
+
+  const hasZaloPhone = !!(location.contactPhone && location.contactPhone.trim())
 
   const handleBookRide = () => {
     setPrefilledDestination({
@@ -67,9 +68,8 @@ export function LocationDetailClient({ location, adminZaloPhone }: Props) {
   }
 
   const handleZaloContact = () => {
-    const phone = location.contactPhone || adminZaloPhone
-    if (phone) {
-      window.open(`https://zalo.me/${phone.replace(/\D/g, '')}`, '_blank')
+    if (location.contactPhone) {
+      window.open(`https://zalo.me/${location.contactPhone.replace(/\D/g, '')}`, '_blank')
     }
   }
 
@@ -216,7 +216,7 @@ export function LocationDetailClient({ location, adminZaloPhone }: Props) {
         </div>
 
         {/* Contact phone */}
-        {location.contactPhone && (
+        {hasZaloPhone && (
           <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 mb-4">
             <Phone size={16} className="text-blue-500" />
             <div>
@@ -245,18 +245,23 @@ export function LocationDetailClient({ location, adminZaloPhone }: Props) {
 
       {/* Sticky bottom buttons */}
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-slate-100 px-4 py-3 flex gap-3 shadow-lg z-40">
-        <Button
-          id="location-zalo-contact"
-          variant="outline"
-          className="flex-1 gap-2 border-blue-200 text-blue-600 hover:bg-blue-50 font-semibold"
-          onClick={handleZaloContact}
-        >
-          <MessageCircle size={17} />
-          Liên hệ Zalo
-        </Button>
+        {hasZaloPhone && (
+          <Button
+            id="location-zalo-contact"
+            variant="outline"
+            className="flex-1 gap-2 border-blue-200 text-blue-600 hover:bg-blue-50 font-semibold"
+            onClick={handleZaloContact}
+          >
+            <MessageCircle size={17} />
+            Liên hệ Zalo
+          </Button>
+        )}
         <Button
           id="location-book-ride"
-          className="flex-1 gap-2 ocean-gradient text-white font-semibold shadow-md hover:opacity-90"
+          className={cn(
+            'gap-2 ocean-gradient text-white font-semibold shadow-md hover:opacity-90',
+            hasZaloPhone ? 'flex-1' : 'w-full'
+          )}
           onClick={handleBookRide}
         >
           <Car size={17} />

@@ -1,6 +1,4 @@
 import { notFound } from 'next/navigation'
-import Image from 'next/image'
-import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
 import { MobileShell } from '@/components/layout/MobileShell'
 import { LocationDetailClient } from './LocationDetailClient'
@@ -42,10 +40,6 @@ export default async function LocationDetailPage({ params }: Props) {
 
   if (!location) notFound()
 
-  const adminZalo = await prisma.setting.findUnique({
-    where: { key: 'admin_zalo_phone' },
-  })
-
   return (
     <MobileShell withBottomNav={false}>
       <LocationDetailClient
@@ -53,7 +47,6 @@ export default async function LocationDetailPage({ params }: Props) {
           ...location,
           images: (location.images as string[]) ?? [],
         }}
-        adminZaloPhone={adminZalo?.value ?? ''}
       />
     </MobileShell>
   )
