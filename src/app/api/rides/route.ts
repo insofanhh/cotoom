@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { generateToken, calculateDistance } from '@/lib/utils'
+import { generateToken } from '@/lib/utils'
 import { getPricePerKm, computePrice } from '@/lib/pricing'
-import { pusherServer } from '@/lib/pusher'
-import { sendPushToUser } from '@/lib/push'
+import { dispatchRideSequentially } from '@/lib/dispatchEngine'
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,9 +14,16 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const {
-      pickupLat, pickupLng, dropoffLat, dropoffLng,
-      pickupAddress, dropoffAddress, dropoffName,
-      distanceKm, vehicleType, note,
+      pickupLat,
+      pickupLng,
+      dropoffLat,
+      dropoffLng,
+      pickupAddress,
+      dropoffAddress,
+      dropoffName,
+      distanceKm,
+      vehicleType,
+      note,
     } = body
 
     if (!pickupLat || !pickupLng || !dropoffLat || !dropoffLng || !distanceKm || !vehicleType) {
@@ -54,122 +60,12 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Broadcast to all matching drivers before responding — background work
-    // is killed on serverless hosts (Vercel), so no fire-and-forget here
-    await dispatchDrivers(ride, acceptToken).catch(console.error)
+    // Sequential Fair Dispatch: rank drivers by distance tier, rating, and daily trip balance, then offer one by one
+    dispatchRideSequentially(ride, acceptToken).catch(console.error)
 
     return NextResponse.json(ride, { status: 201 })
   } catch (error) {
     console.error('[POST /api/rides]', error)
     return NextResponse.json({ message: 'Server error' }, { status: 500 })
   }
-}
-
-type RideRecord = {
-  id: string
-  vehicleType: string
-  pickupLat: number
-  pickupLng: number
-  dropoffLat: number
-  dropoffLng: number
-  pickupAddress: string | null
-  dropoffAddress: string | null
-  dropoffName: string | null
-  note: string | null
-  distanceKm: number
-  totalPrice: number
-}
-
-const DEFAULT_DISPATCH_RADIUS_KM = 5
-
-// Notify every available driver at once; the first to accept wins.
-// Must finish before the HTTP response — serverless hosts kill background work.
-async function dispatchDrivers(ride: RideRecord, acceptToken: string) {
-  const allDrivers = await prisma.driverProfile.findMany({
-    where: {
-      status: 'APPROVED',
-      isOnline: true,
-      isBusy: false,
-      vehicleType: ride.vehicleType as any,
-    },
-    include: { user: { select: { id: true } } },
-  })
-
-  // Prefer drivers within the dispatch radius of the pickup point (admin-tunable
-  // via the dispatch_radius_km setting). Fall back to everyone if none are close
-  // or if a driver has no known position yet.
-  let radiusKm = DEFAULT_DISPATCH_RADIUS_KM
-  try {
-    const setting = await prisma.setting.findUnique({ where: { key: 'dispatch_radius_km' } })
-    const parsed = parseFloat(setting?.value ?? '')
-    if (!isNaN(parsed) && parsed > 0) radiusKm = parsed
-  } catch {}
-
-  const nearby = allDrivers.filter(
-    (d) =>
-      d.latitude != null &&
-      d.longitude != null &&
-      calculateDistance(d.latitude, d.longitude, ride.pickupLat, ride.pickupLng) <= radiusKm
-  )
-  const drivers = nearby.length > 0 ? nearby : allDrivers
-
-  if (drivers.length === 0) {
-    // No drivers available — cancel right away and tell the client
-    await prisma.ride.update({ where: { id: ride.id }, data: { status: 'CANCELLED' } })
-    try {
-      await pusherServer.trigger(`presence-ride-${ride.id}`, 'ride:status-update', {
-        status: 'CANCELLED',
-        rideId: ride.id,
-      })
-    } catch {
-      // Pusher not configured — skip
-    }
-    return
-  }
-
-  const payload = {
-    rideId: ride.id,
-    acceptUrl: `${process.env.NEXTAUTH_URL}/driver/accept?rideId=${ride.id}&token=${acceptToken}`,
-    acceptToken,
-    vehicleType: ride.vehicleType,
-    pickup: ride.pickupAddress || 'Vị trí hiện tại',
-    dropoff: ride.dropoffAddress || ride.dropoffName || 'Điểm đến',
-    pickupLat: ride.pickupLat,
-    pickupLng: ride.pickupLng,
-    dropoffLat: ride.dropoffLat,
-    dropoffLng: ride.dropoffLng,
-    rideKm: ride.distanceKm,
-    price: ride.totalPrice || 0,
-    note: ride.note,
-  }
-
-  const results = await Promise.allSettled(
-    drivers.map(async (driver) => {
-      // Each driver sees how far away the pickup point is from them
-      const distanceToPickupKm =
-        driver.latitude != null && driver.longitude != null
-          ? parseFloat(
-              calculateDistance(driver.latitude, driver.longitude, ride.pickupLat, ride.pickupLng).toFixed(1)
-            )
-          : null
-      // Realtime event for open dashboards + push for closed/background apps
-      await Promise.allSettled([
-        pusherServer.trigger(`private-driver-${driver.user.id}`, 'ride:new-request', {
-          ...payload,
-          distanceToPickupKm,
-        }),
-        sendPushToUser(driver.user.id, {
-          title: '🛵 Có chuyến xe mới!',
-          body: `${payload.pickup} → ${payload.dropoff} • ${payload.price.toLocaleString('vi-VN')}đ${distanceToPickupKm != null ? ` • cách bạn ${distanceToPickupKm} km` : ''}`,
-          url: '/driver/dashboard',
-          tag: `ride-request-${ride.id}`,
-        }),
-      ])
-    })
-  )
-  results.forEach((r, i) => {
-    if (r.status === 'rejected') {
-      console.error(`[dispatch] notify driver ${drivers[i].user.id} failed:`, r.reason)
-    }
-  })
 }
