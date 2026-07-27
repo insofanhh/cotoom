@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { Toaster } from '@/components/ui/sonner'
 import { PwaRegister } from '@/components/layout/PwaRegister'
+import { Analytics } from '@vercel/analytics/next'
 
 export const metadata: Metadata = {
   title: {
@@ -81,6 +82,7 @@ export default function RootLayout({
         {children}
         <Toaster richColors position="top-center" />
         <PwaRegister />
+        <Analytics />
       </body>
     </html>
   )
