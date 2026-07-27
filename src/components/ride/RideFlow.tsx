@@ -382,6 +382,7 @@ export function RideFlow() {
           pickupLng={booking?.pickupLng}
           dropoffLat={booking?.dropoffLat ?? prefilledDestination?.lat}
           dropoffLng={booking?.dropoffLng ?? prefilledDestination?.lng}
+          vehicleType={selectedVehicleType}
           searchInputRef={searchInputRef}
           onLocationSelect={handleLocationSelect}
           onRouteFound={handleRouteFound}
