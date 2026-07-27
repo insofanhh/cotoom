@@ -135,6 +135,26 @@ export function RideFlow() {
     setPrefilledDestination({ lat, lng, address, name })
   }, [setPrefilledDestination, setBooking])
 
+  const cancelDestination = useCallback(() => {
+    setPrefilledDestination(null)
+    setBooking(null)
+    setFlowState('IDLE')
+    setDrawerOpen(false)
+  }, [setPrefilledDestination, setBooking, setFlowState])
+
+  const handleVehicleChange = (type: 'MOTORBIKE' | 'CAR' | 'ELECTRIC_CAR') => {
+    setSelectedVehicleType(type)
+    const { booking: current } = useRideStore.getState()
+    if (current && current.distanceKm) {
+      const price = current.distanceKm * pricePerKmRef.current[type]
+      setBooking({
+        ...current,
+        vehicleType: type,
+        totalPrice: Math.round(price / 1000) * 1000,
+      })
+    }
+  }
+
   const startEditingPickup = useCallback(() => {
     editingPickupRef.current = true
     setEditingPickup(true)
@@ -339,7 +359,7 @@ export function RideFlow() {
               <button
                 key={type}
                 id={`vehicle-type-${type.toLowerCase()}`}
-                onClick={() => setSelectedVehicleType(type)}
+                onClick={() => handleVehicleChange(type)}
                 className={cn(
                   'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200',
                   selectedVehicleType === type
@@ -401,7 +421,7 @@ export function RideFlow() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
-              className="absolute bottom-6 left-4 right-4 bg-white rounded-2xl p-5 shadow-xl"
+              className="absolute bottom-6 left-4 right-4 bg-white rounded-2xl p-5 shadow-xl z-[500]"
             >
               {!prefilledDestination ? (
                 <div className="py-2">
@@ -425,12 +445,21 @@ export function RideFlow() {
                 </div>
               ) : (
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">Điểm đến</p>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs text-slate-500">Điểm đến đã chọn</p>
+                    <button
+                      type="button"
+                      onClick={cancelDestination}
+                      className="text-xs text-red-500 hover:text-red-600 font-medium hover:underline"
+                    >
+                      Hủy / Chọn điểm khác
+                    </button>
+                  </div>
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
                       <MapPin size={14} className="text-blue-600" />
                     </div>
-                    <p className="font-semibold text-slate-800">{prefilledDestination.name}</p>
+                    <p className="font-semibold text-slate-800 truncate">{prefilledDestination.name}</p>
                   </div>
                   {locationError && (
                     <p className="text-red-500 text-xs mb-3 flex items-center gap-1">
@@ -447,6 +476,55 @@ export function RideFlow() {
                   </Button>
                 </div>
               )}
+            </motion.div>
+          )}
+
+          {/* PREVIEW Collapsed (When user clicks map to inspect route) */}
+          {flowState === 'PREVIEW' && !drawerOpen && booking && (
+            <motion.div
+              key="preview-collapsed"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="absolute bottom-6 left-4 right-4 bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-2xl border border-slate-100 z-[500] space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                  <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                    <MapPin size={16} className="text-emerald-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-800 text-sm truncate">
+                      {booking.dropoffName || booking.dropoffAddress}
+                    </p>
+                    <p className="text-xs text-slate-500 truncate">
+                      {booking.distanceKm.toFixed(1)} km • {vehicleLabels[booking.vehicleType]}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="font-bold text-blue-600 text-base">{formatVND(booking.totalPrice)}</p>
+                  {booking.durationMin && <p className="text-[10px] text-slate-400">~{booking.durationMin} phút</p>}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <Button
+                  id="ride-reopen-drawer"
+                  className="flex-1 ocean-gradient text-white font-semibold text-sm shadow-md py-2.5"
+                  onClick={() => setDrawerOpen(true)}
+                >
+                  Xem giá & Đặt xe
+                </Button>
+                <Button
+                  id="ride-cancel-selection"
+                  variant="outline"
+                  className="border-slate-200 text-slate-600 hover:bg-slate-100 px-3 py-2.5 text-xs shrink-0"
+                  onClick={cancelDestination}
+                >
+                  Chọn điểm khác
+                </Button>
+              </div>
             </motion.div>
           )}
 
@@ -775,22 +853,32 @@ export function RideFlow() {
             </div>
           )}
 
-          <DrawerFooter className="flex gap-3 px-4 pb-6">
+          <DrawerFooter className="flex flex-col gap-2 px-4 pb-6">
             <Button
               id="ride-confirm"
-              className="flex-1 ocean-gradient text-white font-semibold py-3 text-base"
+              className="w-full ocean-gradient text-white font-semibold py-3 text-base shadow-md"
               onClick={confirmRide}
             >
               Xác nhận đặt xe
             </Button>
-            <Button
-              id="ride-drawer-cancel"
-              variant="outline"
-              className="flex-1"
-              onClick={() => { setDrawerOpen(false); setFlowState('IDLE') }}
-            >
-              Hủy
-            </Button>
+            <div className="flex gap-2 w-full">
+              <Button
+                id="ride-drawer-view-map"
+                variant="outline"
+                className="flex-1 border-slate-200 text-slate-700 text-xs"
+                onClick={() => setDrawerOpen(false)}
+              >
+                Xem trên bản đồ
+              </Button>
+              <Button
+                id="ride-drawer-cancel"
+                variant="ghost"
+                className="flex-1 text-red-500 hover:bg-red-50 text-xs"
+                onClick={cancelDestination}
+              >
+                Chọn điểm khác
+              </Button>
+            </div>
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
