@@ -1,16 +1,26 @@
 const GOONG_API_KEY = process.env.NEXT_PUBLIC_GOONG_API_KEY || ''
-const GOONG_MAPTILES_KEY = process.env.NEXT_PUBLIC_GOONG_MAPTILES_KEY || GOONG_API_KEY
+const GOONG_MAPTILES_KEY = process.env.NEXT_PUBLIC_GOONG_MAPTILES_KEY || ''
 
 export function getGoongTileUrl() {
-  const key = GOONG_MAPTILES_KEY || GOONG_API_KEY
-  return `https://grs.goong.io/rest/maptile/goong_map_web/{z}/{x}/{y}.png?api_key=${key}`
+  // Goong MapTiles require a valid Map Tiles key from account.goong.io (e.g. 20+ chars, not placeholder like "Cotoom")
+  const isMapTilesKeyValid =
+    GOONG_MAPTILES_KEY &&
+    GOONG_MAPTILES_KEY.length >= 20 &&
+    GOONG_MAPTILES_KEY.toLowerCase() !== 'cotoom'
+
+  if (isMapTilesKeyValid) {
+    return `https://tiles.goong.io/assets/goong_map_web/{z}/{x}/{y}.png?api_key=${GOONG_MAPTILES_KEY}`
+  }
+
+  // Fallback to standard OpenStreetMap tile layer for map background tiles
+  return 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 }
 
 export async function goongReverseGeocode(lat: number, lng: number): Promise<{ address: string; name: string }> {
   try {
     const url = `https://rsapi.goong.io/Geocode?latlng=${lat},${lng}&api_key=${GOONG_API_KEY}`
     const res = await fetch(url)
-    if (!res.ok) throw new Error()
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
     if (data.results && data.results.length > 0) {
       const first = data.results[0]
@@ -28,7 +38,7 @@ export async function goongAutoComplete(query: string, location = '20.9892,107.7
   try {
     const url = `https://rsapi.goong.io/Place/AutoComplete?api_key=${GOONG_API_KEY}&location=${location}&input=${encodeURIComponent(query)}`
     const res = await fetch(url)
-    if (!res.ok) throw new Error()
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
     return data.predictions || []
   } catch (err) {
@@ -41,7 +51,7 @@ export async function goongPlaceDetail(placeId: string): Promise<{ lat: number; 
   try {
     const url = `https://rsapi.goong.io/Place/Detail?place_id=${placeId}&api_key=${GOONG_API_KEY}`
     const res = await fetch(url)
-    if (!res.ok) throw new Error()
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
     if (data.result && data.result.geometry?.location) {
       const loc = data.result.geometry.location
@@ -77,7 +87,7 @@ export async function goongGetDirection(
     const url = `https://rsapi.goong.io/Direction?origin=${originStr}&destination=${destStr}&vehicle=${vehicle}&api_key=${GOONG_API_KEY}`
     
     const res = await fetch(url)
-    if (!res.ok) throw new Error()
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
 
     if (data.routes && data.routes.length > 0) {
