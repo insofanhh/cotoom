@@ -151,6 +151,8 @@ export default function LeafletMapCore({
     }
   }, [])
 
+  const lastRouteKeyRef = useRef<string>('')
+
   // Update Markers & Goong Direction Route
   useEffect(() => {
     const map = mapInstance.current
@@ -165,14 +167,6 @@ export default function LeafletMapCore({
       } catch (e) {}
     })
     markersRef.current = []
-
-    // Clear old polyline route
-    if (routePolylineRef.current) {
-      try {
-        routePolylineRef.current.remove()
-      } catch (e) {}
-      routePolylineRef.current = null
-    }
 
     // Render predefined locations
     if (locations && locations.length > 0 && !dropoffLat) {
@@ -253,58 +247,80 @@ export default function LeafletMapCore({
       markersRef.current.push(m)
     }
 
-    // Calculate Route via Goong Direction API if both points exist
+    // Calculate Route via Goong Direction API if both points exist (guarded to fetch ONCE per route)
     if (pickupLat && pickupLng && dropoffLat && dropoffLng) {
-      let isMounted = true
+      const routeKey = `${pickupLat.toFixed(5)},${pickupLng.toFixed(5)}_${dropoffLat.toFixed(5)},${dropoffLng.toFixed(5)}_${vehicleType}`
 
-      goongGetDirection(
-        { lat: pickupLat, lng: pickupLng },
-        { lat: dropoffLat, lng: dropoffLng },
-        vehicleType
-      ).then((routeRes) => {
-        if (!isMounted || !mapInstance.current || !routeRes) return
+      if (lastRouteKeyRef.current !== routeKey) {
+        lastRouteKeyRef.current = routeKey
 
-        // Draw Polyline route on map
-        const polyline = L.polyline(routeRes.coordinates, {
-          color: '#3b82f6',
-          weight: 5,
-          opacity: 0.85,
-          lineCap: 'round',
-          lineJoin: 'round',
-        }).addTo(mapInstance.current)
+        let isMounted = true
 
-        routePolylineRef.current = polyline
+        goongGetDirection(
+          { lat: pickupLat, lng: pickupLng },
+          { lat: dropoffLat, lng: dropoffLng },
+          vehicleType
+        ).then((routeRes) => {
+          if (!isMounted || !mapInstance.current || !routeRes) return
 
-        // Fit map bounds to show full route and both points with padding
-        try {
-          mapInstance.current.fitBounds(polyline.getBounds(), { padding: [70, 70], maxZoom: 16 })
-        } catch (e) {}
+          // Clear old polyline route
+          if (routePolylineRef.current) {
+            try {
+              routePolylineRef.current.remove()
+            } catch (e) {}
+            routePolylineRef.current = null
+          }
 
-        // Notify parent component of route distance & duration
-        onRouteFoundRef.current?.(routeRes.distanceKm, routeRes.durationMin)
-      })
+          // Draw Polyline route on map
+          const polyline = L.polyline(routeRes.coordinates, {
+            color: '#3b82f6',
+            weight: 5,
+            opacity: 0.85,
+            lineCap: 'round',
+            lineJoin: 'round',
+          }).addTo(mapInstance.current)
 
-      return () => {
-        isMounted = false
+          routePolylineRef.current = polyline
+
+          // Fit map bounds to show full route and both points with padding
+          try {
+            mapInstance.current.fitBounds(polyline.getBounds(), { padding: [70, 70], maxZoom: 16 })
+          } catch (e) {}
+
+          // Notify parent component of route distance & duration
+          onRouteFoundRef.current?.(routeRes.distanceKm, routeRes.durationMin)
+        })
       }
-    } else if (dropoffLat && dropoffLng) {
-      // Fit bounds to show BOTH client location (or pickup) AND selected destination in one frame
-      const originLat = pickupLat ?? clientLocation?.lat
-      const originLng = pickupLng ?? clientLocation?.lng
+    } else {
+      lastRouteKeyRef.current = ''
 
-      if (originLat && originLng) {
+      // Clear old polyline route if points cleared
+      if (routePolylineRef.current) {
         try {
-          const bounds = L.latLngBounds([
-            [originLat, originLng],
-            [dropoffLat, dropoffLng],
-          ])
-          map.fitBounds(bounds, { padding: [80, 80], maxZoom: 15 })
+          routePolylineRef.current.remove()
         } catch (e) {}
-      } else {
-        map.setView([dropoffLat, dropoffLng], 15)
+        routePolylineRef.current = null
       }
-    } else if (pickupLat && pickupLng && !dropoffLat && !clientLocation) {
-      map.setView([pickupLat, pickupLng], 15)
+
+      if (dropoffLat && dropoffLng) {
+        // Fit bounds to show BOTH client location (or pickup) AND selected destination in one frame
+        const originLat = pickupLat ?? clientLocation?.lat
+        const originLng = pickupLng ?? clientLocation?.lng
+
+        if (originLat && originLng) {
+          try {
+            const bounds = L.latLngBounds([
+              [originLat, originLng],
+              [dropoffLat, dropoffLng],
+            ])
+            map.fitBounds(bounds, { padding: [80, 80], maxZoom: 15 })
+          } catch (e) {}
+        } else {
+          map.setView([dropoffLat, dropoffLng], 15)
+        }
+      } else if (pickupLat && pickupLng && !dropoffLat && !clientLocation) {
+        map.setView([pickupLat, pickupLng], 15)
+      }
     }
   }, [pickupLat, pickupLng, dropoffLat, dropoffLng, vehicleType, locations, clientLocation, drivers])
 
