@@ -13,7 +13,6 @@ import type { Metadata } from 'next'
 
 const vehicles = [
   { type: 'MOTORBIKE', label: 'Xe máy', icon: Bike, description: 'Phù hợp các tuyến ngắn' },
-  { type: 'CAR', label: 'Ô tô', icon: Car, description: 'Thoải mái 4+ khách' },
   { type: 'ELECTRIC_CAR', label: 'Xe điện', icon: Zap, description: 'Thân thiện môi trường' },
 ]
 

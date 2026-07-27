@@ -1,14 +1,15 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { Car, Bike, Zap } from 'lucide-react'
+import { Bike, Zap, Key } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useRideStore } from '@/store/rideStore'
+import { toast } from 'sonner'
 
 const vehicles = [
-  { type: 'MOTORBIKE' as const, icon: Bike, label: 'Xe máy', color: 'bg-blue-500' },
-  { type: 'CAR' as const, icon: Car, label: 'Ô tô', color: 'bg-indigo-500' },
-  { type: 'ELECTRIC_CAR' as const, icon: Zap, label: 'Xe điện', color: 'bg-emerald-500' },
+  { type: 'MOTORBIKE' as const, icon: Bike, label: 'Xe máy', color: 'bg-blue-500', isRental: false },
+  { type: 'ELECTRIC_CAR' as const, icon: Zap, label: 'Xe điện', color: 'bg-emerald-500', isRental: false },
+  { type: 'RENTAL' as const, icon: Key, label: 'Thuê xe', color: 'bg-amber-500', isRental: true },
 ]
 
 interface QuickRideButtonProps {
@@ -24,8 +25,12 @@ export function QuickRideButton({ pricePerKm }: QuickRideButtonProps) {
   const router = useRouter()
   const { setSelectedVehicleType } = useRideStore()
 
-  const handleSelect = (type: 'MOTORBIKE' | 'CAR' | 'ELECTRIC_CAR') => {
-    setSelectedVehicleType(type)
+  const handleSelect = (v: typeof vehicles[number]) => {
+    if (v.isRental) {
+      toast.info('Chức năng thuê xe đang được phát triển, vui lòng quay lại sau!')
+      return
+    }
+    setSelectedVehicleType(v.type as 'MOTORBIKE' | 'ELECTRIC_CAR')
     router.push('/ride')
   }
 
@@ -35,6 +40,8 @@ export function QuickRideButton({ pricePerKm }: QuickRideButtonProps) {
       <div className="grid grid-cols-3 gap-2">
         {vehicles.map((v, i) => {
           const Icon = v.icon
+          const rateText = v.isRental ? 'Tự lái' : formatRate(pricePerKm?.[v.type]) ? `${formatRate(pricePerKm?.[v.type])}/km` : null
+
           return (
             <motion.button
               key={v.type}
@@ -43,7 +50,7 @@ export function QuickRideButton({ pricePerKm }: QuickRideButtonProps) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.08 }}
               whileTap={{ scale: 0.96 }}
-              onClick={() => handleSelect(v.type)}
+              onClick={() => handleSelect(v)}
               className="flex flex-col items-center gap-2 bg-white rounded-xl p-3 shadow-sm border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all duration-200 cursor-pointer"
             >
               <div className={`w-9 h-9 rounded-xl ${v.color} flex items-center justify-center`}>
@@ -51,9 +58,7 @@ export function QuickRideButton({ pricePerKm }: QuickRideButtonProps) {
               </div>
               <div className="text-center">
                 <p className="text-xs font-semibold text-slate-700">{v.label}</p>
-                {formatRate(pricePerKm?.[v.type]) && (
-                  <p className="text-[10px] text-slate-400">{formatRate(pricePerKm?.[v.type])}/km</p>
-                )}
+                {rateText && <p className="text-[10px] text-slate-400">{rateText}</p>}
               </div>
             </motion.button>
           )

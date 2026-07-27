@@ -29,12 +29,15 @@ import { toast } from 'sonner'
 import { MapComponent } from './MapComponent'
 import { RideRating } from './RideRating'
 
-const vehicleIcons = { MOTORBIKE: Bike, CAR: Car, ELECTRIC_CAR: Zap }
-const vehicleLabels = { MOTORBIKE: 'Xe máy', CAR: 'Ô tô', ELECTRIC_CAR: 'Xe điện' }
-const vehicleColors = {
+import { Key } from 'lucide-react'
+
+const vehicleIcons: Record<string, any> = { MOTORBIKE: Bike, CAR: Car, ELECTRIC_CAR: Zap, RENTAL: Key }
+const vehicleLabels: Record<string, string> = { MOTORBIKE: 'Xe máy', CAR: 'Ô tô', ELECTRIC_CAR: 'Xe điện', RENTAL: 'Thuê xe' }
+const vehicleColors: Record<string, string> = {
   MOTORBIKE: 'bg-blue-500',
   CAR: 'bg-indigo-500',
   ELECTRIC_CAR: 'bg-emerald-500',
+  RENTAL: 'bg-amber-500',
 }
 
 // Fallback rates — replaced by admin-configured settings fetched on mount
@@ -352,13 +355,20 @@ export function RideFlow() {
 
         {/* Vehicle selector */}
         <div className="flex gap-2">
-          {(['MOTORBIKE', 'CAR', 'ELECTRIC_CAR'] as const).map((type) => {
+          {(['MOTORBIKE', 'ELECTRIC_CAR', 'RENTAL'] as const).map((type) => {
             const Icon = vehicleIcons[type]
+            const isRental = type === 'RENTAL'
             return (
               <button
                 key={type}
                 id={`vehicle-type-${type.toLowerCase()}`}
-                onClick={() => handleVehicleChange(type)}
+                onClick={() => {
+                  if (isRental) {
+                    toast.info('Chức năng thuê xe đang được phát triển, vui lòng quay lại sau!')
+                    return
+                  }
+                  handleVehicleChange(type as 'MOTORBIKE' | 'ELECTRIC_CAR')
+                }}
                 className={cn(
                   'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200',
                   selectedVehicleType === type
