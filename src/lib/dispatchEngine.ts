@@ -186,6 +186,8 @@ export async function dispatchRideSequentially(ride: RideRecord, acceptToken: st
 
     // 15-second window to wait for acceptance
     const WAIT_SECONDS = 15
+    let acceptedOrCancelled = false
+
     for (let sec = 0; sec < WAIT_SECONDS; sec++) {
       await new Promise((resolve) => setTimeout(resolve, 1000))
 
@@ -195,12 +197,25 @@ export async function dispatchRideSequentially(ride: RideRecord, acceptToken: st
       })
 
       if (!checkState || checkState.status !== 'SEARCHING') {
-        return // Candidate accepted or client cancelled
+        acceptedOrCancelled = true
+        break // Candidate accepted or client cancelled
       }
     }
 
-    // If 15 seconds expired without acceptance, proceed to next candidate in queue
-    console.log(`[Dispatch Engine] 15s window expired for driver ${candidate.name}. Moving to next candidate...`)
+    if (acceptedOrCancelled) {
+      return
+    }
+
+    // If 15 seconds expired without acceptance:
+    // Notify candidate #1 that the offer expired so their dashboard modal closes immediately!
+    try {
+      await pusherServer.trigger(`private-driver-${candidate.userId}`, 'ride:request-expired', {
+        rideId: ride.id,
+        message: 'Lượt nhận chuyến của bạn đã hết hạn',
+      })
+    } catch {}
+
+    console.log(`[Dispatch Engine] 15s window expired for driver ${candidate.name}. Moving to candidate ${i + 2}/${candidates.length}...`)
   }
 
   // Final check: if no driver accepted after trying all candidates

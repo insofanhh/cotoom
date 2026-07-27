@@ -60,12 +60,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       }
     }
 
-    // Notify client
+    // Notify client & driver via Pusher
     try {
       await pusherServer.trigger(`presence-ride-${id}`, 'ride:status-update', {
         status,
         rideId: id
       })
+      if (status === 'CANCELLED' && ride.driverId) {
+        await pusherServer.trigger(`private-driver-${ride.driverId}`, 'ride:cancelled', {
+          rideId: id,
+          message: 'Khách hàng đã hủy chuyến xe',
+        })
+      }
     } catch {
       // Ignore pusher errors
     }

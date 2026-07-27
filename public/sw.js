@@ -19,16 +19,15 @@ self.addEventListener('push', (event) => {
     data = { body: event.data ? event.data.text() : '' }
   }
 
-  // No app name in the fallback title — the OS already attributes
-  // the notification to CoToom (iOS shows "from CoToom" on its own)
-  const title = data.title || 'Thông báo mới'
+  const title = data.title || 'Thông báo mới từ CoToom'
   const options = {
     body: data.body || '',
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
-    vibrate: [300, 100, 300],
+    vibrate: [500, 200, 500, 200, 500],
     tag: data.tag || undefined,
-    renotify: !!data.tag,
+    renotify: true,
+    requireInteraction: true, // Keep notification visible on lock screen / notification center until user interacts
     data: { url: data.url || '/' },
   }
 

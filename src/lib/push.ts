@@ -20,7 +20,7 @@ export interface PushPayload {
 }
 
 /**
- * Send a push notification to every registered device of a user.
+ * Send a high-priority push notification to every registered device of a user.
  * Never throws — push is best-effort and must not break the main flow.
  * Expired subscriptions (404/410) are pruned automatically.
  */
@@ -37,7 +37,12 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
           await webpush.sendNotification(
             { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
             body,
-            { TTL: 300 }
+            {
+              TTL: 60, // 60 seconds delivery window
+              headers: {
+                Urgency: 'high', // CRITICAL: forces APNs (iOS) and FCM (Android) to deliver push immediately when device/PWA is closed/locked
+              },
+            }
           )
         } catch (err: any) {
           if (err?.statusCode === 404 || err?.statusCode === 410) {

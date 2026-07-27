@@ -145,16 +145,34 @@ export function DriverDashboardClient({ profile, userId, userName, adminZaloPhon
 
     channel.bind('ride:new-request', (data: any) => {
       setIncomingRide(data)
-      setIncomingCountdown(INCOMING_TIMEOUT_SECONDS)
+      setIncomingCountdown(data.timeoutSeconds || INCOMING_TIMEOUT_SECONDS)
       startAlert()
-      toast('Có chuyến xe mới!', {
+      toast('🛵 Có chuyến xe mới dành cho bạn!', {
         description: `Từ ${data.pickup} đến ${data.dropoff}`,
         icon: '🔔',
       })
     })
 
+    channel.bind('ride:request-expired', (data: any) => {
+      stopAlert()
+      setIncomingRide(null)
+      toast.info('Lượt nhận chuyến xe đã hết hạn', {
+        description: data?.message || 'Chuyến xe đã chuyển sang tài xế khác.',
+      })
+    })
+
+    channel.bind('ride:cancelled', (data: any) => {
+      stopAlert()
+      setIncomingRide(null)
+      toast.error('Chuyến đi đã bị hủy', {
+        description: data?.message || 'Khách hàng đã hủy chuyến xe.',
+      })
+    })
+
     return () => {
       channel.unbind('ride:new-request')
+      channel.unbind('ride:request-expired')
+      channel.unbind('ride:cancelled')
       pusher.unsubscribe(channelName)
     }
   }, [isOnline, localProfile.status, userId, startAlert])
