@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { writeFile, mkdir } from 'fs/promises'
-import path from 'path'
 import { auth } from '@/lib/auth'
 
 export async function POST(req: NextRequest) {
@@ -19,21 +17,11 @@ export async function POST(req: NextRequest) {
 
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
+    const mimeType = file.type || 'image/jpeg'
+    const base64Data = buffer.toString('base64')
+    const dataUrl = `data:${mimeType};base64,${base64Data}`
 
-    // Ensure uploads directory exists inside public/
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads')
-    try {
-      await mkdir(uploadsDir, { recursive: true })
-    } catch (e) {}
-
-    // Generate unique filename
-    const ext = path.extname(file.name) || '.jpg'
-    const filename = `location-${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`
-    const filepath = path.join(uploadsDir, filename)
-
-    await writeFile(filepath, buffer)
-
-    return NextResponse.json({ url: `/uploads/${filename}` })
+    return NextResponse.json({ url: dataUrl })
   } catch (err: any) {
     console.error('[Upload Error]', err)
     return NextResponse.json({ error: err.message || 'Upload failed' }, { status: 500 })

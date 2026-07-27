@@ -29,6 +29,42 @@ interface LocationFormProps {
   children?: React.ReactElement
 }
 
+// Client-side image compressor & reader to prevent Vercel EROFS read-only file system errors
+function compressImage(file: File, maxWidth = 1200, quality = 0.8): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.readAsDataURL(file)
+    reader.onload = (event) => {
+      const src = event.target?.result as string
+      if (!src) return reject(new Error('Khởi tạo file thất bại'))
+
+      const img = new window.Image()
+      img.src = src
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let width = img.width
+        let height = img.height
+
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width)
+          width = maxWidth
+        }
+
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return resolve(src)
+
+        ctx.drawImage(img, 0, 0, width, height)
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality)
+        resolve(compressedDataUrl)
+      }
+      img.onerror = () => resolve(src)
+    }
+    reader.onerror = (err) => reject(err)
+  })
+}
+
 export function LocationForm({ location, children }: LocationFormProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -51,7 +87,7 @@ export function LocationForm({ location, children }: LocationFormProps) {
     setLng(newLng)
   }
 
-  // Handle direct file upload to /api/upload
+  // Handle client-side file selection & compression (Zero Vercel EROFS errors)
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
     if (!files || files.length === 0) return
@@ -60,21 +96,11 @@ export function LocationForm({ location, children }: LocationFormProps) {
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
-      const formData = new FormData()
-      formData.append('file', file)
-
       try {
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData,
-        })
-        if (!res.ok) throw new Error('Upload thất bại')
-        const data = await res.json()
-        if (data.url) {
-          setImages((prev) => [...prev, data.url])
-        }
+        const dataUrl = await compressImage(file)
+        setImages((prev) => [...prev, dataUrl])
       } catch (err: any) {
-        toast.error(`Lỗi tải ảnh ${file.name}: ${err.message}`)
+        toast.error(`Lỗi đọc ảnh ${file.name}`)
       }
     }
 
@@ -183,7 +209,7 @@ export function LocationForm({ location, children }: LocationFormProps) {
 
             {/* Existing images list */}
             {images.length > 0 && (
-              <div className="grid grid-cols-3 gap-2.5 p-2 bg-slate-50 rounded-xl border border-slate-200/80">
+              <div className="grid grid-cols-3 gap-2.5 p-2 bg-slate-50 rounded-xl border border-slate-200/80 max-h-[220px] overflow-y-auto">
                 {images.map((imgUrl, index) => (
                   <div key={index} className="relative group aspect-video rounded-lg overflow-hidden border border-slate-200 bg-slate-200">
                     <Image
@@ -191,17 +217,17 @@ export function LocationForm({ location, children }: LocationFormProps) {
                       alt={`Album ${index + 1}`}
                       fill
                       className="object-cover"
-                      unoptimized={imgUrl.startsWith('/uploads/')}
+                      unoptimized
                     />
                     <button
                       type="button"
                       onClick={() => handleRemoveImage(index)}
-                      className="absolute top-1 right-1 bg-red-500/90 text-white p-1 rounded-full opacity-90 group-hover:opacity-100 transition-opacity shadow-md"
+                      className="absolute top-1 right-1 bg-red-500/90 text-white p-1 rounded-full opacity-90 group-hover:opacity-100 transition-opacity shadow-md z-10"
                       title="Xóa ảnh này"
                     >
                       <Trash2 size={12} />
                     </button>
-                    <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded font-mono">
+                    <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded font-mono z-10">
                       #{index + 1}
                     </span>
                   </div>
@@ -229,7 +255,7 @@ export function LocationForm({ location, children }: LocationFormProps) {
                   className="gap-1.5 border-dashed border-blue-300 text-blue-600 hover:bg-blue-50 font-medium"
                 >
                   <Upload size={14} />
-                  {uploading ? 'Đang tải...' : 'Tải ảnh từ máy tính'}
+                  {uploading ? 'Đang đọc ảnh...' : 'Tải ảnh từ máy tính'}
                 </Button>
 
                 <div className="flex-1 flex gap-1.5">
