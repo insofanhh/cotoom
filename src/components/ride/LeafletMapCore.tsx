@@ -103,18 +103,17 @@ export default function LeafletMapCore({
     onRouteFoundRef.current = onRouteFound
   }, [onLocationSelect, onRouteFound])
 
-  // Init Map with Goong Tiles
+  // Init Map with Goong/Tile layer (Attribution hidden)
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return
 
     const map = L.map(mapRef.current, {
       zoomControl: false,
+      attributionControl: false, // Hide Leaflet & Goong attribution bar
       markerZoomAnimation: false,
     }).setView([20.9892, 107.7695], 14) // Co To center
 
-    // Goong Map Tiles
     L.tileLayer(getGoongTileUrl(), {
-      attribution: '&copy; <a href="https://goong.io" target="_blank" rel="noreferrer">Goong Maps</a>',
       maxZoom: 20,
     }).addTo(map)
 
@@ -265,9 +264,9 @@ export default function LeafletMapCore({
 
         routePolylineRef.current = polyline
 
-        // Fit map bounds to show route
+        // Fit map bounds to show full route and both points with padding
         try {
-          mapInstance.current.fitBounds(polyline.getBounds(), { padding: [50, 50] })
+          mapInstance.current.fitBounds(polyline.getBounds(), { padding: [70, 70], maxZoom: 16 })
         } catch (e) {}
 
         // Notify parent component of route distance & duration
@@ -277,91 +276,119 @@ export default function LeafletMapCore({
       return () => {
         isMounted = false
       }
+    } else if (dropoffLat && dropoffLng) {
+      // Fit bounds to show BOTH client location (or pickup) AND selected destination in one frame
+      const originLat = pickupLat ?? clientLocation?.lat
+      const originLng = pickupLng ?? clientLocation?.lng
+
+      if (originLat && originLng) {
+        try {
+          const bounds = L.latLngBounds([
+            [originLat, originLng],
+            [dropoffLat, dropoffLng],
+          ])
+          map.fitBounds(bounds, { padding: [80, 80], maxZoom: 15 })
+        } catch (e) {}
+      } else {
+        map.setView([dropoffLat, dropoffLng], 15)
+      }
     } else if (pickupLat && pickupLng && !dropoffLat && !clientLocation) {
       map.setView([pickupLat, pickupLng], 15)
     }
   }, [pickupLat, pickupLng, dropoffLat, dropoffLng, vehicleType, locations, clientLocation, drivers])
 
-  // Custom Goong AutoComplete Search Box
+  // Custom Goong AutoComplete Search Box (Resilient to DOM unmount/remount)
   useEffect(() => {
-    if (!searchInputRef?.current) return
-    const container = searchInputRef.current
+    let cleanUpClickOutside: (() => void) | null = null
 
-    const input = document.createElement('input')
-    input.type = 'text'
-    input.placeholder = 'Tìm kiếm địa điểm trên CoToom (Goong)...'
-    input.className =
-      'w-full h-full bg-transparent border-none outline-none px-4 py-2 text-sm text-slate-800 placeholder-slate-400'
-    input.style.minHeight = '44px'
+    const checkAndInit = () => {
+      if (!searchInputRef?.current) return
+      const container = searchInputRef.current
 
-    const resultsDiv = document.createElement('div')
-    resultsDiv.className =
-      'absolute top-full left-0 w-full bg-white shadow-xl mt-1.5 rounded-xl overflow-hidden z-[1000] hidden flex-col max-h-[260px] overflow-y-auto border border-slate-100'
+      // If search input is already created, skip
+      if (container.querySelector('input.goong-search-input')) return
 
-    container.innerHTML = ''
-    container.style.position = 'relative'
-    container.appendChild(input)
-    container.appendChild(resultsDiv)
+      const input = document.createElement('input')
+      input.type = 'text'
+      input.placeholder = 'Tìm kiếm địa điểm trên CoToom (Goong)...'
+      input.className =
+        'goong-search-input w-full h-full bg-transparent border-none outline-none px-4 py-2 text-sm text-slate-800 placeholder-slate-400'
+      input.style.minHeight = '44px'
 
-    let timeout: NodeJS.Timeout
+      const resultsDiv = document.createElement('div')
+      resultsDiv.className =
+        'absolute top-full left-0 w-full bg-white shadow-xl mt-1.5 rounded-xl overflow-hidden z-[1000] hidden flex-col max-h-[260px] overflow-y-auto border border-slate-100'
 
-    input.addEventListener('input', (e: any) => {
-      const val = e.target.value
-      clearTimeout(timeout)
-      if (!val || val.trim().length === 0) {
-        resultsDiv.classList.add('hidden')
-        resultsDiv.classList.remove('flex')
-        return
-      }
+      container.innerHTML = ''
+      container.style.position = 'relative'
+      container.appendChild(input)
+      container.appendChild(resultsDiv)
 
-      timeout = setTimeout(async () => {
-        const predictions = await goongAutoComplete(val)
-        if (predictions.length > 0) {
-          resultsDiv.innerHTML = ''
-          predictions.forEach((item: any) => {
-            const div = document.createElement('div')
-            div.className =
-              'px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0 text-sm text-slate-700 transition-colors'
-            
-            const mainText = item.structured_formatting?.main_text || item.description
-            const secondaryText = item.structured_formatting?.secondary_text || ''
+      let timeout: NodeJS.Timeout
 
-            div.innerHTML = `
-              <p class="font-semibold text-slate-800 text-xs">${mainText}</p>
-              ${secondaryText ? `<p class="text-[11px] text-slate-400 mt-0.5 truncate">${secondaryText}</p>` : ''}
-            `
+      input.addEventListener('input', (e: any) => {
+        const val = e.target.value
+        clearTimeout(timeout)
+        if (!val || val.trim().length === 0) {
+          resultsDiv.classList.add('hidden')
+          resultsDiv.classList.remove('flex')
+          return
+        }
 
-            div.onclick = async () => {
-              resultsDiv.classList.add('hidden')
-              resultsDiv.classList.remove('flex')
-              input.value = mainText
+        timeout = setTimeout(async () => {
+          const predictions = await goongAutoComplete(val)
+          if (predictions.length > 0) {
+            resultsDiv.innerHTML = ''
+            predictions.forEach((item: any) => {
+              const div = document.createElement('div')
+              div.className =
+                'px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0 text-sm text-slate-700 transition-colors'
 
-              const detail = await goongPlaceDetail(item.place_id)
-              if (detail) {
-                onLocationSelectRef.current?.(detail.lat, detail.lng, detail.address, detail.name)
+              const mainText = item.structured_formatting?.main_text || item.description
+              const secondaryText = item.structured_formatting?.secondary_text || ''
+
+              div.innerHTML = `
+                <p class="font-semibold text-slate-800 text-xs">${mainText}</p>
+                ${secondaryText ? `<p class="text-[11px] text-slate-400 mt-0.5 truncate">${secondaryText}</p>` : ''}
+              `
+
+              div.onclick = async () => {
+                resultsDiv.classList.add('hidden')
+                resultsDiv.classList.remove('flex')
+                input.value = mainText
+
+                const detail = await goongPlaceDetail(item.place_id)
+                if (detail) {
+                  onLocationSelectRef.current?.(detail.lat, detail.lng, detail.address, detail.name)
+                }
               }
-            }
-            resultsDiv.appendChild(div)
-          })
-          resultsDiv.classList.remove('hidden')
-          resultsDiv.classList.add('flex')
-        } else {
+              resultsDiv.appendChild(div)
+            })
+            resultsDiv.classList.remove('hidden')
+            resultsDiv.classList.add('flex')
+          } else {
+            resultsDiv.classList.add('hidden')
+            resultsDiv.classList.remove('flex')
+          }
+        }, 350)
+      })
+
+      const onClickOutside = (e: any) => {
+        if (!container.contains(e.target)) {
           resultsDiv.classList.add('hidden')
           resultsDiv.classList.remove('flex')
         }
-      }, 350)
-    })
-
-    const onClickOutside = (e: any) => {
-      if (!container.contains(e.target)) {
-        resultsDiv.classList.add('hidden')
-        resultsDiv.classList.remove('flex')
       }
+      document.addEventListener('click', onClickOutside)
+      cleanUpClickOutside = () => document.removeEventListener('click', onClickOutside)
     }
-    document.addEventListener('click', onClickOutside)
+
+    checkAndInit()
+    const timer = setInterval(checkAndInit, 200)
 
     return () => {
-      document.removeEventListener('click', onClickOutside)
+      clearInterval(timer)
+      if (cleanUpClickOutside) cleanUpClickOutside()
     }
   }, [searchInputRef])
 

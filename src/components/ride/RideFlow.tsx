@@ -338,8 +338,7 @@ export function RideFlow() {
   return (
     <div className="min-h-svh flex flex-col">
       {/* Header */}
-      <div className="ocean-gradient px-4 pt-12 pb-6 relative">
-        <div className="h-6 bg-slate-50 absolute bottom-0 left-0 right-0" style={{ borderRadius: '60% 60% 0 0 / 20px 20px 0 0' }} />
+      <div className="ocean-gradient px-4 pt-12 pb-5 relative">
         <div className="flex items-center gap-3 mb-3">
           <button
             id="ride-back"
