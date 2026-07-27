@@ -76,9 +76,19 @@ export default function LocationPreviewMap({ latitude, longitude, name, type }: 
       .addTo(map)
 
     return () => {
-      map.stop()
-      map.off()
-      map.remove()
+      try {
+        if (mapInstance.current) {
+          mapInstance.current.eachLayer((layer: any) => {
+            try {
+              if (layer.unbindTooltip) layer.unbindTooltip()
+              if (layer.unbindPopup) layer.unbindPopup()
+            } catch (e) {}
+          })
+          mapInstance.current.stop()
+          mapInstance.current.off()
+          mapInstance.current.remove()
+        }
+      } catch (e) {}
       mapInstance.current = null
     }
   }, [latitude, longitude, name, type])

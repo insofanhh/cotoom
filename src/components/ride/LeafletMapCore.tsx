@@ -128,6 +128,15 @@ export default function LeafletMapCore({
 
     return () => {
       try {
+        markersRef.current.forEach((m) => {
+          try {
+            m.unbindTooltip()
+            m.unbindPopup()
+            m.remove()
+          } catch (e) {}
+        })
+        markersRef.current = []
+
         if (routePolylineRef.current) {
           routePolylineRef.current.remove()
           routePolylineRef.current = null
@@ -147,9 +156,11 @@ export default function LeafletMapCore({
     const map = mapInstance.current
     if (!map) return
 
-    // Clear old markers
+    // Clear old markers safely
     markersRef.current.forEach((m) => {
       try {
+        m.unbindTooltip()
+        m.unbindPopup()
         m.remove()
       } catch (e) {}
     })
