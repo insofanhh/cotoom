@@ -33,40 +33,40 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 })
 
-// Custom icons for locations
-const icons: Record<string, L.Icon> = {
-  ATTRACTION: L.icon({
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-violet.png',
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41],
-  }),
-  HOMESTAY: L.icon({
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41],
-  }),
-  RESTAURANT: L.icon({
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-orange.png',
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41],
-  }),
-  DEFAULT: L.icon({
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-gold.png',
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41],
-  }),
+// Custom icons per category (Attraction = Camera/Landmark, Homestay = Hotel/Bed, Restaurant = Utensils)
+const categoryConfigs: Record<string, { bgClass: string; svg: string }> = {
+  ATTRACTION: {
+    bgClass: 'bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-violet-300',
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>`,
+  },
+  HOMESTAY: {
+    bgClass: 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-emerald-300',
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg>`,
+  },
+  RESTAURANT: {
+    bgClass: 'bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-orange-300',
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 2-4 2v16"/><path d="M14 16.25V22"/><path d="M18 16.25V22"/><path d="M4 2v4a3 3 0 0 0 3 3h0a3 3 0 0 0 3-3V2"/><path d="M7 9v13"/></svg>`,
+  },
+  DEFAULT: {
+    bgClass: 'bg-gradient-to-br from-blue-500 to-cyan-600 text-white shadow-blue-300',
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`,
+  },
+}
+
+function getCategoryLocationIcon(type: string) {
+  const config = categoryConfigs[type] || categoryConfigs.DEFAULT
+  return L.divIcon({
+    className: 'custom-category-marker',
+    html: `
+      <div class="relative flex items-center justify-center">
+        <div class="w-8 h-8 rounded-full ${config.bgClass} border-2 border-white shadow-md flex items-center justify-center transition-transform hover:scale-110">
+          ${config.svg}
+        </div>
+      </div>
+    `,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  })
 }
 
 // Client Location Icon (Pulsing Dot)
@@ -167,14 +167,14 @@ export default function LeafletMapCore({
     if (locations && locations.length > 0 && !dropoffLat) {
       locations.forEach((loc) => {
         if (loc.latitude && loc.longitude) {
-          const typeIcon = icons[loc.type] || icons.DEFAULT
+          const typeIcon = getCategoryLocationIcon(loc.type)
           const m = L.marker([loc.latitude, loc.longitude], { icon: typeIcon, title: loc.name })
             .bindTooltip(loc.name, {
               permanent: true,
               direction: 'top',
               className:
-                'bg-white border-0 shadow-sm text-xs font-bold text-slate-700 px-2 py-1 rounded-md mb-1',
-              offset: [0, -25],
+                'bg-white border-0 shadow-md text-[11px] font-bold text-slate-800 px-2 py-0.5 rounded-lg mb-1 pointer-events-none',
+              offset: [0, -18],
             })
             .addTo(map)
 
