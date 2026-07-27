@@ -90,24 +90,32 @@ export function RideFlow() {
       .catch(() => {}) // defaults still apply
   }, [])
 
-  // Fetch client location and nearby drivers on load
+  // Fetch client location
   useEffect(() => {
     if (typeof window !== 'undefined' && navigator.geolocation) {
-       navigator.geolocation.getCurrentPosition((pos) => {
-         const lat = pos.coords.latitude
-         const lng = pos.coords.longitude
-         setClientLocation({ lat, lng })
-         
-         // Fetch drivers
-         fetch(`/api/drivers/nearby?lat=${lat}&lng=${lng}`)
-           .then(res => res.json())
-           .then(data => setDrivers(data))
-           .catch(err => console.error("Failed to fetch drivers", err))
-       }, (err) => {
-         console.warn("Could not get location", err)
-       }, { timeout: 10000 })
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude
+          const lng = pos.coords.longitude
+          setClientLocation({ lat, lng })
+        },
+        (err) => {
+          console.warn('Could not get location', err)
+        },
+        { timeout: 10000 }
+      )
     }
   }, [])
+
+  // Fetch nearby drivers matching selected vehicle type
+  useEffect(() => {
+    if (clientLocation) {
+      fetch(`/api/drivers/nearby?lat=${clientLocation.lat}&lng=${clientLocation.lng}&vehicleType=${selectedVehicleType}`)
+        .then((res) => res.json())
+        .then((data) => setDrivers(Array.isArray(data) ? data : []))
+        .catch((err) => console.error('Failed to fetch drivers', err))
+    }
+  }, [clientLocation, selectedVehicleType])
 
   // Fetch predefined locations
   useEffect(() => {
@@ -402,7 +410,7 @@ export function RideFlow() {
             latitude: driverInfo.latitude,
             longitude: driverInfo.longitude,
             vehicleType: driverInfo.vehicleType
-          }] : drivers}
+          }] : drivers.filter((d) => d.vehicleType === selectedVehicleType)}
         />
 
         {/* Pickup adjustment hint */}

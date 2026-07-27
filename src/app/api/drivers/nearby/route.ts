@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import type { VehicleType } from '@/types'
 
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371; // km
@@ -17,6 +18,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const lat = parseFloat(searchParams.get('lat') || '0')
     const lng = parseFloat(searchParams.get('lng') || '0')
+    const vehicleType = searchParams.get('vehicleType') as VehicleType | null
 
     if (!lat || !lng) {
       return NextResponse.json({ message: 'Missing lat or lng' }, { status: 400 })
@@ -25,31 +27,29 @@ export async function GET(req: NextRequest) {
     const onlineDrivers = await prisma.driverProfile.findMany({
       where: {
         isOnline: true,
+        ...(vehicleType ? { vehicleType } : {}),
         latitude: { not: null },
-        longitude: { not: null }
+        longitude: { not: null },
       },
-      select: {
-        id: true,
-        vehicleType: true,
-        vehiclePlate: true,
-        latitude: true,
-        longitude: true,
-        user: { select: { name: true, phone: true } }
-      }
+      include: {
+        user: { select: { name: true, phone: true } },
+      },
     })
 
     // Filter within 3km
-    const nearbyDrivers = onlineDrivers.filter(driver => {
-      const dist = calculateDistance(lat, lng, driver.latitude!, driver.longitude!)
-      return dist <= 3
-    }).map(d => ({
-      id: d.id,
-      name: d.user.name,
-      vehicleType: d.vehicleType,
-      vehiclePlate: d.vehiclePlate,
-      latitude: d.latitude,
-      longitude: d.longitude
-    }))
+    const nearbyDrivers = onlineDrivers
+      .filter((driver) => {
+        const dist = calculateDistance(lat, lng, driver.latitude!, driver.longitude!)
+        return dist <= 3
+      })
+      .map((d) => ({
+        id: d.id,
+        name: d.user.name,
+        vehicleType: d.vehicleType,
+        vehiclePlate: d.vehiclePlate,
+        latitude: d.latitude,
+        longitude: d.longitude,
+      }))
 
     return NextResponse.json(nearbyDrivers)
   } catch (error) {
