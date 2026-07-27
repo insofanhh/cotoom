@@ -11,7 +11,7 @@ interface LocationMapPickerProps {
   onChange: (lat: number, lng: number, address?: string) => void
 }
 
-// Fix Leaflet marker icons
+// Fix Leaflet icons globally
 delete (L.Icon.Default.prototype as any)._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -33,7 +33,7 @@ export default function LocationMapPicker({ lat, lng, onChange }: LocationMapPic
   const initialLat = lat || 20.9892
   const initialLng = lng || 107.7695
 
-  // Init map
+  // Init Leaflet map
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return
 
@@ -50,23 +50,22 @@ export default function LocationMapPicker({ lat, lng, onChange }: LocationMapPic
     markerRef.current = marker
 
     marker.on('dragend', async () => {
-      const position = marker.getLatLng()
-      const result = await goongReverseGeocode(position.lat, position.lng)
+      const pos = marker.getLatLng()
+      const result = await goongReverseGeocode(pos.lat, pos.lng)
       onChangeRef.current(
-        Number(position.lat.toFixed(6)),
-        Number(position.lng.toFixed(6)),
+        Number(pos.lat.toFixed(6)),
+        Number(pos.lng.toFixed(6)),
         result.address
       )
     })
 
     // Click map to reposition marker
     map.on('click', async (e: L.LeafletMouseEvent) => {
-      const { lat: newLat, lng: newLng } = e.latlng
-      marker.setLatLng([newLat, newLng])
-      const result = await goongReverseGeocode(newLat, newLng)
+      marker.setLatLng(e.latlng)
+      const result = await goongReverseGeocode(e.latlng.lat, e.latlng.lng)
       onChangeRef.current(
-        Number(newLat.toFixed(6)),
-        Number(newLng.toFixed(6)),
+        Number(e.latlng.lat.toFixed(6)),
+        Number(e.latlng.lng.toFixed(6)),
         result.address
       )
     })
@@ -83,8 +82,8 @@ export default function LocationMapPicker({ lat, lng, onChange }: LocationMapPic
   // Sync marker position if props change
   useEffect(() => {
     if (mapInstance.current && markerRef.current && lat && lng) {
-      const currentPos = markerRef.current.getLatLng()
-      if (Math.abs(currentPos.lat - lat) > 0.00001 || Math.abs(currentPos.lng - lng) > 0.00001) {
+      const pos = markerRef.current.getLatLng()
+      if (Math.abs(pos.lat - lat) > 0.00001 || Math.abs(pos.lng - lng) > 0.00001) {
         markerRef.current.setLatLng([lat, lng])
         mapInstance.current.setView([lat, lng], 15)
       }
@@ -184,7 +183,7 @@ export default function LocationMapPicker({ lat, lng, onChange }: LocationMapPic
   return (
     <div className="space-y-2">
       <div ref={searchInputRef} className="relative z-[500]" />
-      <div className="relative w-full h-[240px] rounded-xl overflow-hidden border border-slate-200 shadow-inner">
+      <div className="relative w-full h-[250px] rounded-xl overflow-hidden border border-slate-200 shadow-inner">
         <div ref={mapRef} className="absolute inset-0 z-0" />
       </div>
       <p className="text-[11px] text-slate-500 italic text-center">

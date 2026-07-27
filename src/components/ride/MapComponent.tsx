@@ -10,7 +10,7 @@ const LeafletMapCore = dynamic(() => import('./LeafletMapCore'), {
       <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
       <h3 className="text-slate-600 font-medium">Đang tải bản đồ CoToom...</h3>
     </div>
-  )
+  ),
 })
 
 interface MapComponentProps {

@@ -29,6 +29,7 @@
     "leaflet-geosearch": "^4.4.0",
     "leaflet-routing-machine": "^3.2.12",
     "lucide-react": "^1.24.0",
+    "maplibre-gl": "^6.0.0",
     "mariadb": "^3.5.3",
     "next": "16.2.10",
     "next-auth": "^5.0.0-beta.31",
