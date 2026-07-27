@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import {
@@ -19,6 +20,17 @@ import { Badge } from '@/components/ui/badge'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRideStore } from '@/store/rideStore'
 import { cn } from '@/lib/utils'
+
+// Dynamic import with no SSR for Leaflet map preview
+const LocationPreviewMap = dynamic(() => import('@/components/location/LocationPreviewMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-48 bg-slate-100 rounded-2xl flex flex-col items-center justify-center text-xs text-slate-400 gap-2">
+      <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      Đang tải bản đồ Cô Tô...
+    </div>
+  ),
+})
 
 const typeLabel: Record<string, string> = {
   ATTRACTION: 'Điểm tham quan',
@@ -226,20 +238,14 @@ export function LocationDetailClient({ location }: Props) {
           </div>
         )}
 
-        {/* Map link placeholder */}
-        <div className="rounded-xl overflow-hidden border border-slate-200/70 bg-slate-50 h-32 flex items-center justify-center">
-          <div className="text-center">
-            <MapPin size={24} className="text-blue-400 mx-auto mb-1" />
-            <p className="text-xs text-slate-500 font-medium">Vị trí địa điểm trên Cô Tô</p>
-            <a
-              href={`https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-blue-600 font-semibold flex items-center justify-center gap-1 mt-1 hover:underline"
-            >
-              Mở trên Google Maps <ChevronRight size={12} />
-            </a>
-          </div>
+        {/* Live Goong Map Preview with Marker */}
+        <div className="mb-4">
+          <LocationPreviewMap
+            latitude={location.latitude}
+            longitude={location.longitude}
+            name={location.name}
+            type={location.type}
+          />
         </div>
       </div>
 
