@@ -86,7 +86,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       },
     }
     const content = pushContent[status]
-    if (content) {
+    if (content && ride.clientId) {
       await sendPushToUser(ride.clientId, { ...content, url: `/ride/${id}`, tag: `ride-${id}` })
     }
 

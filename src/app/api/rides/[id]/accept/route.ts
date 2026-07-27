@@ -75,12 +75,14 @@ export async function GET(req: NextRequest, { params }: Params) {
       // Pusher not configured — skip
     }
 
-    await sendPushToUser(updatedRide.clientId, {
-      title: '✅ Tài xế đã nhận chuyến!',
-      body: 'Tài xế đang trên đường đến đón bạn.',
-      url: `/ride/${id}`,
-      tag: `ride-${id}`,
-    })
+    if (updatedRide.clientId) {
+      await sendPushToUser(updatedRide.clientId, {
+        title: '✅ Tài xế đã nhận chuyến!',
+        body: 'Tài xế đang trên đường đến đón bạn.',
+        url: `/ride/${id}`,
+        tag: `ride-${id}`,
+      })
+    }
 
     return NextResponse.redirect(new URL('/driver/dashboard?accepted=1', req.url))
   } catch (error) {
@@ -101,6 +103,11 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const body = await req.json()
     const { acceptToken } = body
+
+    const driverProfile = await prisma.driverProfile.findUnique({ where: { userId: driverId } })
+    if (!driverProfile || driverProfile.status !== 'APPROVED') {
+      return NextResponse.json({ message: 'Tài khoản chưa được phê duyệt hoặc đang bị đóng băng' }, { status: 403 })
+    }
 
     // Atomic claim — with broadcast dispatch several drivers can race, only one wins
     const claimed = await prisma.ride.updateMany({
@@ -138,12 +145,14 @@ export async function POST(req: NextRequest, { params }: Params) {
       })
     } catch { }
 
-    await sendPushToUser(updatedRide.clientId, {
-      title: '✅ Tài xế đã nhận chuyến!',
-      body: `${driver?.name ?? 'Tài xế'} (${driver?.driverProfile?.vehiclePlate ?? ''}) đang trên đường đến đón bạn.`,
-      url: `/ride/${id}`,
-      tag: `ride-${id}`,
-    })
+    if (updatedRide.clientId) {
+      await sendPushToUser(updatedRide.clientId, {
+        title: '✅ Tài xế đã nhận chuyến!',
+        body: `${driver?.name ?? 'Tài xế'} (${driver?.driverProfile?.vehiclePlate ?? ''}) đang trên đường đến đón bạn.`,
+        url: `/ride/${id}`,
+        tag: `ride-${id}`,
+      })
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

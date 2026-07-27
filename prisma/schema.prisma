@@ -31,6 +31,7 @@ enum DriverStatus {
   PENDING_APPROVAL
   APPROVED
   REJECTED
+  FROZEN
 }
 
 enum LocationType {
@@ -132,10 +133,10 @@ model Location {
 
 model Ride {
   id              String      @id @default(cuid())
-  clientId        String
-  client          User        @relation("ClientRides", fields: [clientId], references: [id])
+  clientId        String?
+  client          User?       @relation("ClientRides", fields: [clientId], references: [id], onDelete: SetNull)
   driverId        String?
-  driver          User?       @relation("DriverRides", fields: [driverId], references: [id])
+  driver          User?       @relation("DriverRides", fields: [driverId], references: [id], onDelete: SetNull)
 
   pickupLat       Float
   pickupLng       Float

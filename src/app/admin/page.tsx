@@ -108,8 +108,8 @@ async function RecentRides() {
           {rides.map((ride) => (
             <tr key={ride.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
               <td className="px-6 py-3">
-                <p className="font-medium text-slate-800">{ride.client.name}</p>
-                <p className="text-slate-400 text-xs">{ride.client.phone}</p>
+                <p className="font-medium text-slate-800">{ride.client?.name ?? '—'}</p>
+                <p className="text-slate-400 text-xs">{ride.client?.phone ?? ''}</p>
               </td>
               <td className="px-6 py-3 text-slate-600">{ride.driver?.name ?? '—'}</td>
               <td className="px-6 py-3 text-slate-600">{ride.distanceKm.toFixed(1)} km</td>

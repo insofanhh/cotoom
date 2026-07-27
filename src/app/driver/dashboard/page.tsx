@@ -12,9 +12,14 @@ export default async function DriverDashboardPage() {
   if (!session?.user) redirect('/login')
   if (session.user.role !== 'DRIVER' && session.user.role !== 'ADMIN') redirect('/')
 
-  const profile = await prisma.driverProfile.findUnique({
-    where: { userId: session.user.id },
-  })
+  const [profile, adminZaloSetting] = await Promise.all([
+    prisma.driverProfile.findUnique({
+      where: { userId: session.user.id },
+    }),
+    prisma.setting.findUnique({
+      where: { key: 'admin_zalo_phone' },
+    }),
+  ])
 
   if (!profile) redirect('/driver/register')
 
@@ -30,9 +35,9 @@ export default async function DriverDashboardPage() {
     prisma.ride.findFirst({
       where: {
         driverId: session.user.id,
-        status: { in: ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'] }
+        status: { in: ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'] },
       },
-      include: { client: { select: { name: true, phone: true } } }
+      include: { client: { select: { name: true, phone: true } } },
     }),
     prisma.ride.aggregate({
       where: { driverId: session.user.id, status: 'COMPLETED', updatedAt: { gte: startOfTodayVN } },
@@ -101,6 +106,7 @@ export default async function DriverDashboardPage() {
       profile={profile}
       userId={session.user.id}
       userName={session.user.name}
+      adminZaloPhone={adminZaloSetting?.value || ''}
       initialActiveRide={activeRide}
       initialPendingRide={pendingRide}
       earnings={{

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Waves, Power, Star, Car, TrendingUp, DollarSign, Route, Bell, ChevronLeft, AlertCircle, MapPin, Navigation, User, Phone, CheckCircle } from 'lucide-react'
+import { Waves, Power, Star, Car, TrendingUp, DollarSign, Route, Bell, ChevronLeft, AlertCircle, MapPin, Navigation, User, Phone, CheckCircle, Snowflake, MessageCircle, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { signOut } from 'next-auth/react'
@@ -45,6 +45,7 @@ interface Props {
   profile: DriverProfile
   userId: string
   userName: string
+  adminZaloPhone?: string
   initialActiveRide?: any
   initialPendingRide?: any
   earnings?: Earnings
@@ -59,9 +60,9 @@ const vehicleLabels: Record<string, string> = {
 
 const INCOMING_TIMEOUT_SECONDS = 20
 
-export function DriverDashboardClient({ profile, userId, userName, initialActiveRide, initialPendingRide, earnings, recentRides }: Props) {
+export function DriverDashboardClient({ profile, userId, userName, adminZaloPhone, initialActiveRide, initialPendingRide, earnings, recentRides }: Props) {
   const [localProfile, setLocalProfile] = useState(profile)
-  const [isOnline, setIsOnline] = useState(profile.isOnline)
+  const [isOnline, setIsOnline] = useState(profile.status === 'APPROVED' ? profile.isOnline : false)
   const [toggling, setToggling] = useState(false)
   // Hydrate a still-claimable request (e.g. arriving via push notification tap)
   const [incomingRide, setIncomingRide] = useState<any>(
@@ -136,7 +137,7 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
   }, [stopAlert])
 
   useEffect(() => {
-    if (!isOnline) return
+    if (!isOnline || localProfile.status !== 'APPROVED') return
 
     const pusher = getPusherClient()
     const channelName = `private-driver-${userId}`
@@ -156,11 +157,44 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
       channel.unbind('ride:new-request')
       pusher.unsubscribe(channelName)
     }
-  }, [isOnline, userId, startAlert])
+  }, [isOnline, localProfile.status, userId, startAlert])
+
+  // Listen for admin account freeze/unfreeze — always active (not just when online)
+  useEffect(() => {
+    const pusher = getPusherClient()
+    const channelName = `private-driver-${userId}`
+    const channel = pusher.subscribe(channelName)
+
+    channel.bind('account:status', (data: any) => {
+      if (data.status === 'FROZEN') {
+        setLocalProfile((prev) => ({ ...prev, status: 'FROZEN', isOnline: false }))
+        setIsOnline(false)
+        toast.error('🔒 Tài khoản đã bị đóng băng', {
+          description: data.message || 'Tài khoản của bạn đã bị tạm khóa bởi Admin.',
+          duration: 10000,
+        })
+      } else if (data.status === 'APPROVED') {
+        setLocalProfile((prev) => ({ ...prev, status: 'APPROVED' }))
+        toast.success('✅ Tài khoản đã được kích hoạt lại', {
+          description: data.message || 'Bạn đã có thể bật online và nhận chuyến xe.',
+          duration: 8000,
+        })
+      } else if (data.status === 'REJECTED') {
+        setLocalProfile((prev) => ({ ...prev, status: 'REJECTED', isOnline: false }))
+        setIsOnline(false)
+      }
+    })
+
+    return () => {
+      channel.unbind('account:status')
+      // Only unsubscribe if online listener isn't already managing this channel
+      if (!isOnline) pusher.unsubscribe(channelName)
+    }
+  }, [userId, isOnline])
 
   // Stream GPS position while online — server relays it to the active ride channel
   useEffect(() => {
-    if (!isOnline || typeof navigator === 'undefined' || !navigator.geolocation) return
+    if (!isOnline || localProfile.status !== 'APPROVED' || typeof navigator === 'undefined' || !navigator.geolocation) return
     let lastSent = 0
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
@@ -180,7 +214,7 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
       { enableHighAccuracy: true, maximumAge: 3000 }
     )
     return () => navigator.geolocation.clearWatch(watchId)
-  }, [isOnline])
+  }, [isOnline, localProfile.status])
 
   // Countdown — auto-dismiss the request when it hits zero
   useEffect(() => {
@@ -199,6 +233,11 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
 
   const acceptRide = async () => {
     if (!incomingRide) return
+    if (localProfile.status !== 'APPROVED') {
+      toast.error('Tài khoản không ở trạng thái sẵn sàng nhận chuyến.')
+      setIncomingRide(null)
+      return
+    }
     stopAlert()
     setToggling(true)
     try {
@@ -274,6 +313,14 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
   }
 
   const toggleOnline = async () => {
+    if (localProfile.status !== 'APPROVED') {
+      toast.error(
+        localProfile.status === 'FROZEN'
+          ? 'Tài khoản của bạn đang bị đóng băng.'
+          : 'Tài khoản chưa được phê duyệt.'
+      )
+      return
+    }
     ensureAudioContext() // user gesture — unlock audio for ride alerts
     if (!isOnline) {
       // Going online — register this device for push ride alerts
@@ -286,11 +333,15 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isOnline: !isOnline }),
       })
-      if (!res.ok) throw new Error('Lỗi cập nhật trạng thái')
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.message || 'Lỗi cập nhật trạng thái')
+      }
       setIsOnline(!isOnline)
-      toast.success(isOnline ? 'Bạn đã offline' : 'Bạn đang online - sẵn sàng nhận chuyến!')
-    } catch {
-      toast.error('Không thể cập nhật trạng thái')
+      toast.success(!isOnline ? 'Bạn đang online - sẵn sàng nhận chuyến!' : 'Bạn đã offline')
+    } catch (err: any) {
+      toast.error(err.message || 'Không thể cập nhật trạng thái')
+      setIsOnline(false)
     } finally {
       setToggling(false)
     }
@@ -298,11 +349,12 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
 
   const isPending = localProfile.status === 'PENDING_APPROVAL'
   const isRejected = localProfile.status === 'REJECTED'
+  const isFrozen = localProfile.status === 'FROZEN'
 
   return (
     <div className="min-h-svh bg-slate-50">
       {/* Header */}
-      <div className={cn('px-4 pt-12 pb-8 relative', isOnline ? 'ocean-gradient' : 'bg-slate-400')}>
+      <div className={cn('px-4 pt-12 pb-8 relative', isOnline && !isFrozen ? 'ocean-gradient' : 'bg-slate-500')}>
         <div className="h-6 bg-slate-50 absolute bottom-0 left-0 right-0" style={{ borderRadius: '60% 60% 0 0 / 20px 20px 0 0' }} />
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
@@ -315,8 +367,8 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
         </div>
         <h1 className="font-outfit font-bold text-white text-xl">Xin chào, {userName}!</h1>
         <div className="flex items-center gap-2 mt-1">
-          <div className={cn('w-2 h-2 rounded-full', isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-white/40')} />
-          <span className="text-white/80 text-sm">{isOnline ? 'Đang online' : 'Offline'}</span>
+          <div className={cn('w-2 h-2 rounded-full', isOnline && !isFrozen ? 'bg-emerald-400 animate-pulse' : isFrozen ? 'bg-red-400' : 'bg-white/40')} />
+          <span className="text-white/80 text-sm">{isFrozen ? 'Đã bị đóng băng' : isOnline ? 'Đang online' : 'Offline'}</span>
           <span className="text-white/50 text-sm">•</span>
           <span className="text-white/70 text-sm">{vehicleLabels[localProfile.vehicleType]} — {localProfile.vehiclePlate}</span>
         </div>
@@ -324,7 +376,56 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
 
       <div className="px-4 pt-4 pb-10 space-y-4">
         {/* Push notification status */}
-        {!isPending && !isRejected && <PushPrompt />}
+        {!isPending && !isRejected && !isFrozen && <PushPrompt />}
+
+        {/* Frozen notice */}
+        {isFrozen && (
+          <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 text-white rounded-2xl p-5 shadow-lg border border-blue-800/40 space-y-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center shrink-0">
+                <Snowflake size={24} className="text-blue-300 animate-pulse" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-base text-white">Tài khoản bị đóng băng</h3>
+                  <Badge className="bg-red-500/20 text-red-300 border-red-500/30 text-[10px] px-2 py-0.5">
+                    Đã khóa
+                  </Badge>
+                </div>
+                <p className="text-slate-300 text-xs mt-1 leading-relaxed">
+                  Tài khoản của bạn đã bị tạm khóa bởi Quản trị viên. Bạn không thể bật chế độ hoạt động hoặc nhận chuyến xe mới.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-white/10 flex items-center justify-between flex-wrap gap-2">
+              <span className="text-xs text-slate-300">
+                Cần hỗ trợ mở khóa?
+              </span>
+              {adminZaloPhone ? (
+                <a
+                  href={`https://zalo.me/${adminZaloPhone.replace(/\D/g, '')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 active:scale-95 text-white text-xs font-semibold rounded-xl transition-all shadow-md"
+                >
+                  <MessageCircle size={15} />
+                  Chat Zalo Admin
+                </a>
+              ) : (
+                <a
+                  href="https://zalo.me"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 active:scale-95 text-white text-xs font-semibold rounded-xl transition-all shadow-md"
+                >
+                  <MessageCircle size={15} />
+                  Chat Zalo Admin
+                </a>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Pending notice */}
         {isPending && (
@@ -337,8 +438,29 @@ export function DriverDashboardClient({ profile, userId, userName, initialActive
           </div>
         )}
 
+        {/* Rejected notice */}
+        {isRejected && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+            <AlertCircle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-red-800 text-sm">Hồ sơ bị từ chối</p>
+              <p className="text-red-600 text-xs mt-0.5">Hồ sơ tài xế của bạn chưa đạt yêu cầu. Vui lòng liên hệ Admin qua Zalo để biết thêm chi tiết.</p>
+              {adminZaloPhone && (
+                <a
+                  href={`https://zalo.me/${adminZaloPhone.replace(/\D/g, '')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-red-700 font-bold mt-2 hover:underline"
+                >
+                  <MessageCircle size={14} /> Chat Zalo Admin
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Online toggle */}
-        {!isPending && !isRejected && (
+        {!isPending && !isRejected && !isFrozen && (
           <motion.button
             id="driver-online-toggle"
             whileTap={{ scale: 0.97 }}

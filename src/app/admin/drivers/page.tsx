@@ -16,9 +16,12 @@ export default async function AdminDriversPage() {
     orderBy: { createdAt: 'desc' },
   })
 
+  // Cast to any[] — isBusy and other fields come from the model directly
+  const typedDrivers = drivers as any[]
+
   return (
     <AdminShell title="Quản lý tài xế">
-      <AdminDriversClient drivers={drivers} />
+      <AdminDriversClient drivers={typedDrivers} />
     </AdminShell>
   )
 }
