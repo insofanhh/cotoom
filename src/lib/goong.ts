@@ -2,18 +2,8 @@ const GOONG_API_KEY = process.env.NEXT_PUBLIC_GOONG_API_KEY || ''
 const GOONG_MAPTILES_KEY = process.env.NEXT_PUBLIC_GOONG_MAPTILES_KEY || ''
 
 export function getGoongTileUrl() {
-  // Goong MapTiles require a valid Map Tiles key from account.goong.io (e.g. 20+ chars, not placeholder like "Cotoom")
-  const isMapTilesKeyValid =
-    GOONG_MAPTILES_KEY &&
-    GOONG_MAPTILES_KEY.length >= 20 &&
-    GOONG_MAPTILES_KEY.toLowerCase() !== 'cotoom'
-
-  if (isMapTilesKeyValid) {
-    return `https://tiles.goong.io/assets/goong_map_web/{z}/{x}/{y}.png?api_key=${GOONG_MAPTILES_KEY}`
-  }
-
-  // Fallback to standard OpenStreetMap tile layer for map background tiles
-  return 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+  // CartoDB Voyager raster tiles — modern, sleek Google/Goong style map background for Leaflet
+  return 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
 }
 
 export async function goongReverseGeocode(lat: number, lng: number): Promise<{ address: string; name: string }> {
