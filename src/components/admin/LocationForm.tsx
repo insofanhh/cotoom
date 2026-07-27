@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import dynamic from 'next/dynamic'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createLocation, updateLocation } from '@/app/admin/places/actions'
 import { toast } from 'sonner'
-import { MapPin } from 'lucide-react'
+import { MapPin, Upload, Trash2, Plus, Image as ImageIcon } from 'lucide-react'
 import type { LocationModel as Location } from '@/generated/prisma/models'
 
 // Dynamic import with no SSR for Leaflet map picker
@@ -31,8 +32,17 @@ interface LocationFormProps {
 export function LocationForm({ location, children }: LocationFormProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [lat, setLat] = useState<number>(location?.latitude || 20.9892)
   const [lng, setLng] = useState<number>(location?.longitude || 107.7695)
+  const [type, setType] = useState<'ATTRACTION' | 'HOMESTAY' | 'RESTAURANT'>(
+    (location?.type as any) || 'ATTRACTION'
+  )
+  const [images, setImages] = useState<string[]>(
+    Array.isArray(location?.images) ? (location.images as string[]) : []
+  )
+  const [urlInput, setUrlInput] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const isEdit = !!location
 
@@ -41,20 +51,65 @@ export function LocationForm({ location, children }: LocationFormProps) {
     setLng(newLng)
   }
 
+  // Handle direct file upload to /api/upload
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    setUploading(true)
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      const formData = new FormData()
+      formData.append('file', file)
+
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        })
+        if (!res.ok) throw new Error('Upload thất bại')
+        const data = await res.json()
+        if (data.url) {
+          setImages((prev) => [...prev, data.url])
+        }
+      } catch (err: any) {
+        toast.error(`Lỗi tải ảnh ${file.name}: ${err.message}`)
+      }
+    }
+
+    setUploading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  // Add custom image URL manually
+  function handleAddUrl() {
+    if (!urlInput.trim()) return
+    setImages((prev) => [...prev, urlInput.trim()])
+    setUrlInput('')
+  }
+
+  // Remove image from album
+  function handleRemoveImage(index: number) {
+    setImages((prev) => prev.filter((_, i) => i !== index))
+  }
+
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setLoading(true)
 
     const formData = new FormData(e.currentTarget)
+    const finalImages = images.length > 0 ? images : ['/uploads/placeholder.jpg']
+
     const data = {
       name: formData.get('name') as string,
-      type: formData.get('type') as 'ATTRACTION' | 'HOMESTAY' | 'RESTAURANT',
+      type,
       description: formData.get('description') as string,
       latitude: lat,
       longitude: lng,
       priceRange: formData.get('priceRange') as string,
       contactPhone: (formData.get('contactPhone') as string) || null,
-      images: (location?.images as string[] | undefined) || ['/uploads/placeholder.jpg'],
+      images: finalImages,
     }
 
     const res = isEdit && location ? await updateLocation(location.id, data) : await createLocation(data)
@@ -72,7 +127,7 @@ export function LocationForm({ location, children }: LocationFormProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={children ?? <Button>Thêm địa điểm</Button>} />
-      <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MapPin size={20} className="text-blue-600" />
@@ -88,9 +143,14 @@ export function LocationForm({ location, children }: LocationFormProps) {
 
           <div className="space-y-2">
             <Label htmlFor="type">Loại hình</Label>
-            <Select name="type" defaultValue={location?.type || 'ATTRACTION'}>
+            <input type="hidden" name="type" value={type} />
+            <Select value={type} onValueChange={(val: any) => setType(val)}>
               <SelectTrigger>
-                <SelectValue placeholder="Chọn loại hình" />
+                <SelectValue placeholder="Chọn loại hình">
+                  {type === 'ATTRACTION' && 'Điểm tham quan'}
+                  {type === 'HOMESTAY' && 'Homestay / Khách sạn'}
+                  {type === 'RESTAURANT' && 'Nhà hàng / Quán ăn'}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ATTRACTION">Điểm tham quan</SelectItem>
@@ -109,6 +169,89 @@ export function LocationForm({ location, children }: LocationFormProps) {
               placeholder="Mô tả nổi bật về địa điểm..."
               required
             />
+          </div>
+
+          {/* Image Album Management */}
+          <div className="space-y-2.5">
+            <Label className="flex items-center justify-between font-semibold text-slate-800">
+              <span className="flex items-center gap-1.5">
+                <ImageIcon size={16} className="text-blue-500" />
+                Album hình ảnh ({images.length})
+              </span>
+              <span className="text-[11px] text-slate-500 font-normal">Hỗ trợ JPG, PNG, WEBP</span>
+            </Label>
+
+            {/* Existing images list */}
+            {images.length > 0 && (
+              <div className="grid grid-cols-3 gap-2.5 p-2 bg-slate-50 rounded-xl border border-slate-200/80">
+                {images.map((imgUrl, index) => (
+                  <div key={index} className="relative group aspect-video rounded-lg overflow-hidden border border-slate-200 bg-slate-200">
+                    <Image
+                      src={imgUrl}
+                      alt={`Album ${index + 1}`}
+                      fill
+                      className="object-cover"
+                      unoptimized={imgUrl.startsWith('/uploads/')}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(index)}
+                      className="absolute top-1 right-1 bg-red-500/90 text-white p-1 rounded-full opacity-90 group-hover:opacity-100 transition-opacity shadow-md"
+                      title="Xóa ảnh này"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                    <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded font-mono">
+                      #{index + 1}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Upload controls */}
+            <div className="flex flex-col gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={uploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="gap-1.5 border-dashed border-blue-300 text-blue-600 hover:bg-blue-50 font-medium"
+                >
+                  <Upload size={14} />
+                  {uploading ? 'Đang tải...' : 'Tải ảnh từ máy tính'}
+                </Button>
+
+                <div className="flex-1 flex gap-1.5">
+                  <Input
+                    placeholder="Hoặc dán URL ảnh..."
+                    value={urlInput}
+                    onChange={(e) => setUrlInput(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleAddUrl}
+                    disabled={!urlInput.trim()}
+                    className="h-8 px-2.5 text-xs gap-1"
+                  >
+                    <Plus size={13} /> Thêm
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Interactive Map Coordinate Picker */}
@@ -169,7 +312,7 @@ export function LocationForm({ location, children }: LocationFormProps) {
             />
           </div>
 
-          <Button type="submit" className="w-full font-semibold" disabled={loading}>
+          <Button type="submit" className="w-full font-semibold" disabled={loading || uploading}>
             {loading ? 'Đang lưu...' : 'Lưu lại'}
           </Button>
         </form>

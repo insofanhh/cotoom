@@ -5,13 +5,14 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import {
   ChevronLeft,
+  ChevronRight,
   MapPin,
   Phone,
   MessageCircle,
   Car,
   Share2,
-  Star,
-  ChevronRight,
+  X,
+  Maximize2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -21,8 +22,8 @@ import { cn } from '@/lib/utils'
 
 const typeLabel: Record<string, string> = {
   ATTRACTION: 'Điểm tham quan',
-  HOMESTAY: 'Homestay',
-  RESTAURANT: 'Nhà hàng',
+  HOMESTAY: 'Homestay / Khách sạn',
+  RESTAURANT: 'Nhà hàng / Quán ăn',
 }
 
 const typeBadgeClass: Record<string, string> = {
@@ -52,6 +53,7 @@ export function LocationDetailClient({ location, adminZaloPhone }: Props) {
   const router = useRouter()
   const { setPrefilledDestination, setSelectedVehicleType } = useRideStore()
   const [activeImage, setActiveImage] = useState(0)
+  const [showLightbox, setShowLightbox] = useState(false)
 
   const handleBookRide = () => {
     setPrefilledDestination({
@@ -71,12 +73,20 @@ export function LocationDetailClient({ location, adminZaloPhone }: Props) {
     }
   }
 
-  const images = location.images.length > 0 ? location.images : [null]
+  const images = location.images && location.images.length > 0 ? location.images : [null]
+
+  const nextImage = () => {
+    setActiveImage((prev) => (prev + 1) % images.length)
+  }
+
+  const prevImage = () => {
+    setActiveImage((prev) => (prev - 1 + images.length) % images.length)
+  }
 
   return (
     <div className="min-h-svh bg-white flex flex-col">
-      {/* Image gallery */}
-      <div className="relative h-64 bg-slate-200 overflow-hidden flex-shrink-0">
+      {/* Image gallery slider */}
+      <div className="relative h-72 bg-slate-900 overflow-hidden flex-shrink-0 group">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeImage}
@@ -84,7 +94,8 @@ export function LocationDetailClient({ location, adminZaloPhone }: Props) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="absolute inset-0"
+            className="absolute inset-0 cursor-pointer"
+            onClick={() => images[activeImage] && setShowLightbox(true)}
           >
             {images[activeImage] ? (
               <Image
@@ -94,23 +105,24 @@ export function LocationDetailClient({ location, adminZaloPhone }: Props) {
                 className="object-cover"
                 sizes="448px"
                 priority
+                unoptimized={images[activeImage]!.startsWith('/uploads/')}
               />
             ) : (
               <div className="w-full h-full ocean-gradient flex items-center justify-center">
-                <MapPin size={40} className="text-white/50" />
+                <MapPin size={48} className="text-white/50" />
               </div>
             )}
           </motion.div>
         </AnimatePresence>
 
         {/* Overlay gradient */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/20" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30 pointer-events-none" />
 
         {/* Back button */}
         <button
           id="location-detail-back"
           onClick={() => router.back()}
-          className="absolute top-12 left-4 glass w-9 h-9 rounded-full flex items-center justify-center"
+          className="absolute top-12 left-4 glass w-9 h-9 rounded-full flex items-center justify-center z-10 shadow-md"
         >
           <ChevronLeft size={20} className="text-white" />
         </button>
@@ -118,24 +130,50 @@ export function LocationDetailClient({ location, adminZaloPhone }: Props) {
         {/* Share */}
         <button
           id="location-detail-share"
-          className="absolute top-12 right-4 glass w-9 h-9 rounded-full flex items-center justify-center"
+          className="absolute top-12 right-4 glass w-9 h-9 rounded-full flex items-center justify-center z-10 shadow-md"
           onClick={() => navigator.share?.({ title: location.name, url: window.location.href })}
         >
           <Share2 size={16} className="text-white" />
         </button>
 
-        {/* Image dots */}
+        {/* Image Counter & Fullscreen hint */}
+        {images.length > 0 && images[0] && (
+          <button
+            onClick={() => setShowLightbox(true)}
+            className="absolute top-12 right-16 glass px-2.5 py-1 rounded-full text-[11px] text-white flex items-center gap-1 z-10 font-medium"
+          >
+            <Maximize2 size={11} /> {activeImage + 1}/{images.length}
+          </button>
+        )}
+
+        {/* Previous / Next Arrow Controls */}
         {images.length > 1 && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+          <>
+            <button
+              onClick={prevImage}
+              className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/70 text-white p-2 rounded-full backdrop-blur-sm transition-all z-10"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <button
+              onClick={nextImage}
+              className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/70 text-white p-2 rounded-full backdrop-blur-sm transition-all z-10"
+            >
+              <ChevronRight size={20} />
+            </button>
+          </>
+        )}
+
+        {/* Slide Indicator Dots */}
+        {images.length > 1 && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
             {images.map((_, i) => (
               <button
                 key={i}
                 onClick={() => setActiveImage(i)}
                 className={cn(
-                  'rounded-full transition-all duration-200',
-                  i === activeImage
-                    ? 'w-4 h-1.5 bg-white'
-                    : 'w-1.5 h-1.5 bg-white/50'
+                  'rounded-full transition-all duration-300',
+                  i === activeImage ? 'w-5 h-1.5 bg-white shadow-sm' : 'w-1.5 h-1.5 bg-white/50 hover:bg-white/80'
                 )}
               />
             ))}
@@ -146,13 +184,8 @@ export function LocationDetailClient({ location, adminZaloPhone }: Props) {
       {/* Content */}
       <div className="flex-1 px-5 pt-4 pb-28">
         {/* Type badge */}
-        <Badge
-          className={cn(
-            'text-xs mb-2 border-0',
-            typeBadgeClass[location.type]
-          )}
-        >
-          {typeLabel[location.type]}
+        <Badge className={cn('text-xs mb-2 border-0 font-medium', typeBadgeClass[location.type] || 'bg-slate-100 text-slate-700')}>
+          {typeLabel[location.type] || location.type}
         </Badge>
 
         {/* Name */}
@@ -162,15 +195,15 @@ export function LocationDetailClient({ location, adminZaloPhone }: Props) {
 
         {/* Location coordinates */}
         <div className="flex items-center gap-1.5 text-slate-500 text-sm mb-4">
-          <MapPin size={14} className="text-blue-400 flex-shrink-0" />
-          <span className="text-xs">
+          <MapPin size={14} className="text-blue-500 flex-shrink-0" />
+          <span className="text-xs font-mono">
             {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
           </span>
         </div>
 
         {/* Price */}
         {location.priceRange && (
-          <div className="bg-blue-50 rounded-xl px-4 py-3 mb-4 flex items-center justify-between">
+          <div className="bg-blue-50/80 border border-blue-100 rounded-xl px-4 py-3 mb-4 flex items-center justify-between shadow-xs">
             <span className="text-xs text-slate-600 font-medium">Giá tham khảo</span>
             <span className="text-sm text-blue-700 font-bold">{location.priceRange}</span>
           </div>
@@ -179,12 +212,12 @@ export function LocationDetailClient({ location, adminZaloPhone }: Props) {
         {/* Description */}
         <div className="mb-5">
           <h2 className="font-semibold text-slate-800 text-sm mb-2">Giới thiệu</h2>
-          <p className="text-slate-600 text-sm leading-relaxed">{location.description}</p>
+          <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line">{location.description}</p>
         </div>
 
         {/* Contact phone */}
         {location.contactPhone && (
-          <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 mb-4">
+          <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 mb-4">
             <Phone size={16} className="text-blue-500" />
             <div>
               <p className="text-xs text-slate-500">Liên hệ</p>
@@ -193,18 +226,18 @@ export function LocationDetailClient({ location, adminZaloPhone }: Props) {
           </div>
         )}
 
-        {/* Map placeholder */}
-        <div className="rounded-xl overflow-hidden border border-slate-100 bg-blue-50 h-36 flex items-center justify-center">
+        {/* Map link placeholder */}
+        <div className="rounded-xl overflow-hidden border border-slate-200/70 bg-slate-50 h-32 flex items-center justify-center">
           <div className="text-center">
-            <MapPin size={24} className="text-blue-300 mx-auto mb-1" />
-            <p className="text-xs text-slate-400">Bản đồ vị trí</p>
+            <MapPin size={24} className="text-blue-400 mx-auto mb-1" />
+            <p className="text-xs text-slate-500 font-medium">Vị trí địa điểm trên Cô Tô</p>
             <a
               href={`https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-blue-500 font-medium flex items-center justify-center gap-1 mt-1"
+              className="text-xs text-blue-600 font-semibold flex items-center justify-center gap-1 mt-1 hover:underline"
             >
-              Mở Google Maps <ChevronRight size={12} />
+              Mở trên Google Maps <ChevronRight size={12} />
             </a>
           </div>
         </div>
@@ -230,6 +263,59 @@ export function LocationDetailClient({ location, adminZaloPhone }: Props) {
           Đặt xe đến đây
         </Button>
       </div>
+
+      {/* Fullscreen Lightbox Modal */}
+      {showLightbox && images[activeImage] && (
+        <div className="fixed inset-0 bg-black/95 z-50 flex flex-col justify-between p-4">
+          <div className="flex justify-between items-center text-white pt-8 px-2">
+            <span className="text-xs font-mono">
+              {activeImage + 1} / {images.length} - {location.name}
+            </span>
+            <button onClick={() => setShowLightbox(false)} className="p-2 rounded-full bg-white/20 text-white">
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="relative flex-1 w-full flex items-center justify-center">
+            <Image
+              src={images[activeImage]!}
+              alt={`${location.name} full`}
+              fill
+              className="object-contain"
+              unoptimized={images[activeImage]!.startsWith('/uploads/')}
+            />
+            {images.length > 1 && (
+              <>
+                <button
+                  onClick={prevImage}
+                  className="absolute left-2 bg-white/20 text-white p-3 rounded-full hover:bg-white/40 z-10"
+                >
+                  <ChevronLeft size={24} />
+                </button>
+                <button
+                  onClick={nextImage}
+                  className="absolute right-2 bg-white/20 text-white p-3 rounded-full hover:bg-white/40 z-10"
+                >
+                  <ChevronRight size={24} />
+                </button>
+              </>
+            )}
+          </div>
+
+          <div className="flex justify-center gap-1.5 pb-6">
+            {images.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setActiveImage(i)}
+                className={cn(
+                  'rounded-full transition-all',
+                  i === activeImage ? 'w-4 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/40'
+                )}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
