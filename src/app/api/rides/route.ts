@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { generateToken } from '@/lib/utils'
 import { getPricePerKm, computePrice } from '@/lib/pricing'
-import { dispatchRideSequentially } from '@/lib/dispatchEngine'
+import { createDispatchQueue } from '@/lib/dispatchEngine'
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,15 +30,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: 'Missing required fields' }, { status: 400 })
     }
 
-    // Price is computed server-side from admin settings — never trusted from the client.
-    // Formula: rate per km x routed distance.
+    // Price computed server-side — never trusted from client.
     const rates = await getPricePerKm()
     const rate = rates[vehicleType as keyof typeof rates]
     if (!rate) {
       return NextResponse.json({ message: 'Invalid vehicle type' }, { status: 400 })
     }
     const totalPrice = computePrice(rate, distanceKm)
-
     const acceptToken = generateToken(48)
 
     const ride = await prisma.ride.create({
@@ -60,8 +58,10 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Sequential Fair Dispatch: rank drivers by distance tier, rating, and daily trip balance, then offer one by one
-    dispatchRideSequentially(ride, acceptToken).catch(console.error)
+    // Await createDispatchQueue — this runs within the HTTP handler so it completes
+    // before the response is sent. It creates the DB queue and sends the first notification.
+    // Subsequent dispatch advances happen via /api/rides/[id]/dispatch-tick polling.
+    await createDispatchQueue(ride, acceptToken)
 
     return NextResponse.json(ride, { status: 201 })
   } catch (error) {

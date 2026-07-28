@@ -1,7 +1,24 @@
+/**
+ * dispatchEngine.ts — Database-Driven Sequential Fair Dispatch Engine
+ *
+ * Architecture:
+ * - createDispatchQueue(): called once when ride is created. Ranks all candidates,
+ *   saves their userId list to DB (DispatchQueue), and dispatches to driver[0] immediately.
+ *
+ * - advanceDispatch(): called by POST /api/rides/[id]/dispatch-tick (polled by the
+ *   client every 2 seconds while SEARCHING). Checks if the current driver's 15-second
+ *   window has expired and advances to the next candidate if so.
+ *
+ * This avoids relying on setTimeout in serverless handlers (which get killed when the
+ * HTTP response is sent). The client's polling loop keeps the engine alive.
+ */
+
 import { prisma } from '@/lib/prisma'
 import { calculateDistance } from '@/lib/utils'
 import { pusherServer } from '@/lib/pusher'
 import { sendPushToUser } from '@/lib/push'
+
+const DRIVER_TIMEOUT_SECONDS = 15
 
 export type RideRecord = {
   id: string
@@ -19,29 +36,21 @@ export type RideRecord = {
 }
 
 interface RankedDriver {
-  id: string
   userId: string
   name: string
-  phone: string
-  vehiclePlate: string
   ratingAvg: number
   todayTrips: number
-  distanceBucket: number // 0: <= 2km, 1: <= 5km, 2: > 5km
+  distanceBucket: number // 0: ≤2km, 1: ≤5km, 2: >5km
   exactDistanceKm: number
 }
 
-/**
- * Multi-tier Fair Ranking Algorithm:
- * 1. Distance Zone Bucket (Zone A: 0-2km, Zone B: 2-5km, Zone C: >5km)
- * 2. Driver Rating (ratingAvg DESC)
- * 3. Daily Completed Trips (todayTrips ASC) — Fair order distribution
- * 4. Exact Distance Tie-breaker (exactDistanceKm ASC)
- */
-export async function getRankedCandidateDrivers(
+// ─── Ranking ─────────────────────────────────────────────────────────────────
+
+async function getRankedCandidateUserIds(
   pickupLat: number,
   pickupLng: number,
   vehicleType: string
-): Promise<RankedDriver[]> {
+): Promise<{ userId: string; exactDistanceKm: number }[]> {
   const allDrivers = await prisma.driverProfile.findMany({
     where: {
       status: 'APPROVED',
@@ -49,9 +58,7 @@ export async function getRankedCandidateDrivers(
       isBusy: false,
       vehicleType: vehicleType as any,
     },
-    include: {
-      user: { select: { id: true, name: true, phone: true } },
-    },
+    include: { user: { select: { id: true, name: true } } },
   })
 
   if (allDrivers.length === 0) return []
@@ -59,31 +66,23 @@ export async function getRankedCandidateDrivers(
   const startOfDay = new Date()
   startOfDay.setHours(0, 0, 0, 0)
 
-  // Fetch daily completed trips for all candidate drivers in parallel
-  const rankedDrivers: RankedDriver[] = await Promise.all(
+  const ranked: RankedDriver[] = await Promise.all(
     allDrivers.map(async (driver) => {
       const lat = driver.latitude ?? pickupLat
       const lng = driver.longitude ?? pickupLng
       const dist = calculateDistance(lat, lng, pickupLat, pickupLng)
 
-      let bucket = 2 // Zone C: > 5km
-      if (dist <= 2.0) bucket = 0 // Zone A: <= 2km
-      else if (dist <= 5.0) bucket = 1 // Zone B: 2-5km
+      let bucket = 2
+      if (dist <= 2.0) bucket = 0
+      else if (dist <= 5.0) bucket = 1
 
       const todayTrips = await prisma.ride.count({
-        where: {
-          driverId: driver.userId,
-          status: 'COMPLETED',
-          createdAt: { gte: startOfDay },
-        },
+        where: { driverId: driver.userId, status: 'COMPLETED', createdAt: { gte: startOfDay } },
       })
 
       return {
-        id: driver.id,
         userId: driver.user.id,
         name: driver.user.name,
-        phone: driver.user.phone,
-        vehiclePlate: driver.vehiclePlate,
         ratingAvg: driver.ratingAvg || 5.0,
         todayTrips,
         distanceBucket: bucket,
@@ -92,50 +91,73 @@ export async function getRankedCandidateDrivers(
     })
   )
 
-  // Sort candidates by multi-level priority
-  rankedDrivers.sort((a, b) => {
-    // 1. Distance Tier (Zone A -> Zone B -> Zone C)
-    if (a.distanceBucket !== b.distanceBucket) {
-      return a.distanceBucket - b.distanceBucket
-    }
-
-    // 2. Rating (Higher rating first)
-    if (Math.abs(b.ratingAvg - a.ratingAvg) > 0.01) {
-      return b.ratingAvg - a.ratingAvg
-    }
-
-    // 3. Daily Completed Trips (Fewer daily trips first for fair order distribution)
-    if (a.todayTrips !== b.todayTrips) {
-      return a.todayTrips - b.todayTrips
-    }
-
-    // 4. Exact Distance Tie-breaker
+  ranked.sort((a, b) => {
+    if (a.distanceBucket !== b.distanceBucket) return a.distanceBucket - b.distanceBucket
+    if (Math.abs(b.ratingAvg - a.ratingAvg) > 0.01) return b.ratingAvg - a.ratingAvg
+    if (a.todayTrips !== b.todayTrips) return a.todayTrips - b.todayTrips
     return a.exactDistanceKm - b.exactDistanceKm
   })
 
-  return rankedDrivers
+  return ranked.map((d) => ({ userId: d.userId, exactDistanceKm: d.exactDistanceKm }))
 }
 
+// ─── Notify single driver ─────────────────────────────────────────────────────
+
+async function notifyDriver(
+  userId: string,
+  exactDistanceKm: number,
+  payload: Record<string, any>
+) {
+  await Promise.allSettled([
+    pusherServer.trigger(`private-driver-${userId}`, 'ride:new-request', {
+      ...payload,
+      distanceToPickupKm: exactDistanceKm,
+      timeoutSeconds: DRIVER_TIMEOUT_SECONDS,
+    }),
+    sendPushToUser(userId, {
+      title: '🛵 Có chuyến xe mới dành cho bạn!',
+      body: `${payload.pickup} → ${payload.dropoff} • ${Number(payload.price).toLocaleString('vi-VN')}đ • cách bạn ${exactDistanceKm} km`,
+      url: '/driver/dashboard',
+      tag: `ride-request-${payload.rideId}`,
+    }),
+  ])
+}
+
+async function expireDriver(userId: string, rideId: string) {
+  await pusherServer
+    .trigger(`private-driver-${userId}`, 'ride:request-expired', {
+      rideId,
+      message: 'Lượt nhận chuyến của bạn đã hết hạn',
+    })
+    .catch(() => {})
+}
+
+async function cancelRide(rideId: string, message: string) {
+  await prisma.ride.update({ where: { id: rideId }, data: { status: 'CANCELLED' } }).catch(() => {})
+  await pusherServer
+    .trigger(`presence-ride-${rideId}`, 'ride:status-update', {
+      status: 'CANCELLED',
+      rideId,
+      message,
+    })
+    .catch(() => {})
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
 /**
- * Sequential Fair Dispatch Loop:
- * Offers the ride to candidate drivers ONE AT A TIME with a 15-second window.
+ * Called once when a ride is created.
+ * Ranks candidates, persists queue to DB, dispatches to the first driver immediately.
  */
-export async function dispatchRideSequentially(ride: RideRecord, acceptToken: string) {
-  const candidates = await getRankedCandidateDrivers(ride.pickupLat, ride.pickupLng, ride.vehicleType)
+export async function createDispatchQueue(ride: RideRecord, acceptToken: string) {
+  const candidates = await getRankedCandidateUserIds(ride.pickupLat, ride.pickupLng, ride.vehicleType)
 
   if (candidates.length === 0) {
-    await prisma.ride.update({ where: { id: ride.id }, data: { status: 'CANCELLED' } })
-    try {
-      await pusherServer.trigger(`presence-ride-${ride.id}`, 'ride:status-update', {
-        status: 'CANCELLED',
-        rideId: ride.id,
-        message: 'Không có tài xế nào khả dụng lúc này',
-      })
-    } catch {}
+    await cancelRide(ride.id, 'Không có tài xế nào khả dụng lúc này')
     return
   }
 
-  const payload = {
+  const ridePayload = {
     rideId: ride.id,
     acceptUrl: `${process.env.NEXTAUTH_URL}/driver/accept?rideId=${ride.id}&token=${acceptToken}`,
     acceptToken,
@@ -151,83 +173,106 @@ export async function dispatchRideSequentially(ride: RideRecord, acceptToken: st
     note: ride.note,
   }
 
-  // Iterate sequentially through candidates
-  for (let i = 0; i < candidates.length; i++) {
-    const candidate = candidates[i]
+  // Save queue to DB
+  await prisma.dispatchQueue.create({
+    data: {
+      rideId: ride.id,
+      candidateIds: candidates.map((c) => c.userId),
+      currentIndex: 0,
+      dispatchedAt: new Date(),
+      acceptToken,
+      ridePayload,
+    },
+  })
 
-    // Verify ride is still searching
-    const currentRide = await prisma.ride.findUnique({
-      where: { id: ride.id },
-      select: { status: true },
+  // Dispatch first driver immediately
+  const first = candidates[0]
+  await notifyDriver(first.userId, first.exactDistanceKm, ridePayload)
+}
+
+/**
+ * Called by POST /api/rides/[id]/dispatch-tick (polled by client every 2s while SEARCHING).
+ * Returns the current ride status so the client knows when to stop polling.
+ */
+export async function advanceDispatch(rideId: string): Promise<{
+  rideStatus: string
+  message?: string
+}> {
+  // Check ride status first
+  const ride = await prisma.ride.findUnique({ where: { id: rideId }, select: { status: true } })
+  if (!ride) return { rideStatus: 'CANCELLED', message: 'Chuyến xe không tồn tại' }
+  if (ride.status !== 'SEARCHING') return { rideStatus: ride.status }
+
+  // Load queue
+  const queue = await prisma.dispatchQueue.findUnique({ where: { rideId } })
+  if (!queue) return { rideStatus: 'SEARCHING' }
+
+  const candidateIds = queue.candidateIds as string[]
+  const now = new Date()
+  const elapsedSeconds = (now.getTime() - queue.dispatchedAt.getTime()) / 1000
+
+  // Current driver still within window — nothing to advance
+  if (elapsedSeconds < DRIVER_TIMEOUT_SECONDS) {
+    return { rideStatus: 'SEARCHING' }
+  }
+
+  // Window expired — expire the current driver's notification
+  const currentUserId = candidateIds[queue.currentIndex]
+  if (currentUserId) {
+    await expireDriver(currentUserId, rideId)
+  }
+
+  const nextIndex = queue.currentIndex + 1
+
+  // Tried all candidates — cancel the ride
+  if (nextIndex >= candidateIds.length) {
+    await prisma.dispatchQueue.delete({ where: { rideId } }).catch(() => {})
+    await cancelRide(rideId, 'Tất cả tài xế đều đang bận, vui lòng thử lại sau')
+    return { rideStatus: 'CANCELLED', message: 'Không tìm được tài xế' }
+  }
+
+  // Build fresh candidate list with current distances (drivers may have moved)
+  const freshCandidates = await getRankedCandidateUserIds(
+    (queue.ridePayload as any).pickupLat,
+    (queue.ridePayload as any).pickupLng,
+    (queue.ridePayload as any).vehicleType
+  )
+
+  // Find next driver from queue (respect original order, skip tried ones)
+  const remainingCandidateIds = candidateIds.slice(nextIndex)
+  let nextUserId: string | null = null
+  let nextDistanceKm = 0
+
+  for (const uid of remainingCandidateIds) {
+    // Only offer to drivers who are still online + not busy
+    const profile = await prisma.driverProfile.findUnique({
+      where: { userId: uid },
+      select: { isOnline: true, isBusy: true, status: true, latitude: true, longitude: true },
     })
-
-    if (!currentRide || currentRide.status !== 'SEARCHING') {
-      return // Ride was accepted or cancelled — stop dispatch loop
+    if (profile?.isOnline && !profile.isBusy && profile.status === 'APPROVED') {
+      nextUserId = uid
+      const fresh = freshCandidates.find((c) => c.userId === uid)
+      nextDistanceKm = fresh?.exactDistanceKm ?? 0
+      break
     }
-
-    // Send Push & Realtime notification to ONLY this current target driver
-    try {
-      await Promise.allSettled([
-        pusherServer.trigger(`private-driver-${candidate.userId}`, 'ride:new-request', {
-          ...payload,
-          distanceToPickupKm: candidate.exactDistanceKm,
-          timeoutSeconds: 15,
-        }),
-        sendPushToUser(candidate.userId, {
-          title: '🛵 Có chuyến xe mới dành cho bạn!',
-          body: `${payload.pickup} → ${payload.dropoff} • ${payload.price.toLocaleString('vi-VN')}đ • cách bạn ${candidate.exactDistanceKm} km`,
-          url: '/driver/dashboard',
-          tag: `ride-request-${ride.id}`,
-        }),
-      ])
-    } catch (err) {
-      console.error(`[Dispatch Engine] Error notifying driver ${candidate.userId}:`, err)
-    }
-
-    // 15-second window to wait for acceptance
-    const WAIT_SECONDS = 15
-    let acceptedOrCancelled = false
-
-    for (let sec = 0; sec < WAIT_SECONDS; sec++) {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      const checkState = await prisma.ride.findUnique({
-        where: { id: ride.id },
-        select: { status: true },
-      })
-
-      if (!checkState || checkState.status !== 'SEARCHING') {
-        acceptedOrCancelled = true
-        break // Candidate accepted or client cancelled
-      }
-    }
-
-    if (acceptedOrCancelled) {
-      return
-    }
-
-    // If 15 seconds expired without acceptance:
-    // Notify candidate #1 that the offer expired so their dashboard modal closes immediately!
-    try {
-      await pusherServer.trigger(`private-driver-${candidate.userId}`, 'ride:request-expired', {
-        rideId: ride.id,
-        message: 'Lượt nhận chuyến của bạn đã hết hạn',
-      })
-    } catch {}
-
-    console.log(`[Dispatch Engine] 15s window expired for driver ${candidate.name}. Moving to candidate ${i + 2}/${candidates.length}...`)
   }
 
-  // Final check: if no driver accepted after trying all candidates
-  const finalCheck = await prisma.ride.findUnique({ where: { id: ride.id }, select: { status: true } })
-  if (finalCheck && finalCheck.status === 'SEARCHING') {
-    await prisma.ride.update({ where: { id: ride.id }, data: { status: 'CANCELLED' } })
-    try {
-      await pusherServer.trigger(`presence-ride-${ride.id}`, 'ride:status-update', {
-        status: 'CANCELLED',
-        rideId: ride.id,
-        message: 'Tất cả tài xế đều đang bận, vui lòng thử lại sau',
-      })
-    } catch {}
+  if (!nextUserId) {
+    // No remaining available driver
+    await prisma.dispatchQueue.delete({ where: { rideId } }).catch(() => {})
+    await cancelRide(rideId, 'Tất cả tài xế đều đang bận, vui lòng thử lại sau')
+    return { rideStatus: 'CANCELLED', message: 'Không tìm được tài xế' }
   }
+
+  // Advance queue and notify next driver
+  const nextIndexInQueue = candidateIds.indexOf(nextUserId)
+  await prisma.dispatchQueue.update({
+    where: { rideId },
+    data: { currentIndex: nextIndexInQueue, dispatchedAt: new Date() },
+  })
+
+  await notifyDriver(nextUserId, nextDistanceKm, queue.ridePayload as Record<string, any>)
+  console.log(`[DispatchEngine] Advanced to driver ${nextUserId} (index ${nextIndexInQueue}) for ride ${rideId}`)
+
+  return { rideStatus: 'SEARCHING' }
 }

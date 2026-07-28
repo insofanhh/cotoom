@@ -217,6 +217,39 @@ export function RideFlow() {
     return () => clearInterval(interval)
   }, [flowState, setFlowState, setErrorMessage])
 
+  // Dispatch-tick polling — keeps the sequential dispatch engine alive on serverless.
+  // Every 2 seconds, the client calls the dispatch-tick endpoint which checks whether
+  // the current driver's 15-second window has expired and advances to the next candidate.
+  useEffect(() => {
+    if (flowState !== 'SEARCHING' || !activeRideId) return
+    let stopped = false
+
+    const tick = async () => {
+      if (stopped) return
+      try {
+        const res = await fetch(`/api/rides/${activeRideId}/dispatch-tick`, { method: 'POST' })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.rideStatus === 'CANCELLED') {
+            setFlowState('ERROR')
+            setErrorMessage(data.message ?? 'Không tìm được tài xế, vui lòng thử lại')
+            stopped = true
+          } else if (data.rideStatus !== 'SEARCHING') {
+            stopped = true // ACCEPTED handled by Pusher listener
+          }
+        }
+      } catch {
+        // network error — silently retry next tick
+      }
+    }
+
+    const interval = setInterval(tick, 2000)
+    return () => {
+      stopped = true
+      clearInterval(interval)
+    }
+  }, [flowState, activeRideId, setFlowState, setErrorMessage])
+
   // Listen to Pusher for driver acceptance when SEARCHING
   useEffect(() => {
     if ((flowState !== 'SEARCHING' && flowState !== 'DRIVER_FOUND' && flowState !== 'ARRIVED' && flowState !== 'IN_PROGRESS') || !activeRideId) return

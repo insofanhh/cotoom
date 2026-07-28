@@ -47,6 +47,9 @@ export async function GET(req: NextRequest, { params }: Params) {
     }
     const updatedRide = (await prisma.ride.findUnique({ where: { id } }))!
 
+    // Clean up dispatch queue — stops further dispatch-tick from advancing
+    await prisma.dispatchQueue.delete({ where: { rideId: id } }).catch(() => {})
+
     // Mark driver as busy
     await prisma.driverProfile.update({
       where: { userId: driverId },
@@ -109,16 +112,19 @@ export async function POST(req: NextRequest, { params }: Params) {
       return NextResponse.json({ message: 'Tài khoản chưa được phê duyệt hoặc đang bị đóng băng' }, { status: 403 })
     }
 
-    // Atomic claim — with broadcast dispatch several drivers can race, only one wins
+    // Atomic claim — only the first driver to accept wins; others get 409
     const claimed = await prisma.ride.updateMany({
       where: { id, acceptToken, status: 'SEARCHING' },
       data: { status: 'ACCEPTED', driverId },
     })
     if (claimed.count === 0) {
-      return NextResponse.json({ message: 'Ride unavailable or expired' }, { status: 409 })
+      return NextResponse.json({ message: 'Chuyến xe đã được nhận hoặc đã hủy' }, { status: 409 })
     }
 
     const updatedRide = (await prisma.ride.findUnique({ where: { id } }))!
+
+    // Clean up dispatch queue — stops further dispatch-tick from advancing
+    await prisma.dispatchQueue.delete({ where: { rideId: id } }).catch(() => {})
 
     await prisma.driverProfile.update({
       where: { userId: driverId },

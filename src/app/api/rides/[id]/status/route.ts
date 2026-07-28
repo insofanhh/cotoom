@@ -39,13 +39,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       data: { status }
     })
 
-    // If completed or cancelled, free up the driver
+    // If completed or cancelled, free up the driver and clean dispatch queue
     if (status === 'COMPLETED' || status === 'CANCELLED') {
+      // Remove dispatch queue so dispatch-tick stops trying to advance
+      await prisma.dispatchQueue.delete({ where: { rideId: id } }).catch(() => {})
+
       if (ride.driverId) {
         if (status === 'COMPLETED') {
           await prisma.driverProfile.update({
             where: { userId: ride.driverId },
-            data: { 
+            data: {
               isBusy: false,
               totalTrips: { increment: 1 },
               totalRevenue: { increment: ride.totalPrice }

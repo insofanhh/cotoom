@@ -180,3 +180,23 @@ model Setting {
 
   @@map("settings")
 }
+
+// ─────────────────────────────────────────────
+// Dispatch Queue
+// ─────────────────────────────────────────────
+// Tracks which drivers have been offered a ride and in what order.
+// One row per ride — candidateIds is a JSON array of userId strings ranked by priority.
+// currentIndex points to the driver currently being offered the ride.
+// dispatchedAt is when the current driver was notified (for 15-second timeout check).
+model DispatchQueue {
+  id             String   @id @default(cuid())
+  rideId         String   @unique
+  candidateIds   Json     // String[] — userId list ranked by priority
+  currentIndex   Int      @default(0)
+  dispatchedAt   DateTime // when the current driver was notified
+  acceptToken    String
+  ridePayload    Json     // serialised RideRecord for notifications
+  createdAt      DateTime @default(now())
+
+  @@map("dispatch_queues")
+}
