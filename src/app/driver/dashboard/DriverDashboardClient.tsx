@@ -68,7 +68,9 @@ export function DriverDashboardClient({ profile, userId, userName, adminZaloPhon
   const [incomingRide, setIncomingRide] = useState<any>(
     initialActiveRide ? null : initialPendingRide ?? null
   )
-  const [incomingCountdown, setIncomingCountdown] = useState(INCOMING_TIMEOUT_SECONDS)
+  const [incomingCountdown, setIncomingCountdown] = useState(
+    initialPendingRide?.timeoutSeconds ?? INCOMING_TIMEOUT_SECONDS
+  )
   const [activeRide, setActiveRide] = useState<any>(initialActiveRide || null)
   const router = useRouter()
 
@@ -130,6 +132,13 @@ export function DriverDashboardClient({ profile, userId, userName, adminZaloPhon
     window.addEventListener('pointerdown', unlock, { once: true })
     return () => window.removeEventListener('pointerdown', unlock)
   }, [ensureAudioContext])
+
+  // Start alert sound if driver arrived on dashboard via Push Notification with an active pending ride
+  useEffect(() => {
+    if (initialPendingRide && !initialActiveRide) {
+      startAlert()
+    }
+  }, [initialPendingRide, initialActiveRide, startAlert])
 
   const dismissIncoming = useCallback(() => {
     stopAlert()
@@ -238,7 +247,7 @@ export function DriverDashboardClient({ profile, userId, userName, adminZaloPhon
   useEffect(() => {
     if (!incomingRide) return
     const interval = setInterval(() => {
-      setIncomingCountdown((c) => {
+      setIncomingCountdown((c: number) => {
         if (c <= 1) {
           dismissIncoming()
           return 0

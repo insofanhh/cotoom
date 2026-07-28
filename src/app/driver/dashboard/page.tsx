@@ -69,34 +69,73 @@ export default async function DriverDashboardPage() {
   // hydrate the freshest still-claimable request so the card shows anyway.
   let pendingRide: any = null
   if (!activeRide && profile.status === 'APPROVED' && profile.isOnline && !profile.isBusy) {
-    const p = await prisma.ride.findFirst({
+    const activeQueue = await prisma.dispatchQueue.findFirst({
       where: {
-        status: 'SEARCHING',
-        vehicleType: profile.vehicleType,
         createdAt: { gte: new Date(Date.now() - 2 * 60 * 1000) },
       },
       orderBy: { createdAt: 'desc' },
     })
-    if (p) {
-      pendingRide = {
-        rideId: p.id,
-        acceptToken: p.acceptToken,
-        vehicleType: p.vehicleType,
-        pickup: p.pickupAddress || 'Vị trí hiện tại',
-        dropoff: p.dropoffAddress || p.dropoffName || 'Điểm đến',
-        pickupLat: p.pickupLat,
-        pickupLng: p.pickupLng,
-        dropoffLat: p.dropoffLat,
-        dropoffLng: p.dropoffLng,
-        rideKm: p.distanceKm,
-        price: p.totalPrice,
-        note: p.note,
-        distanceToPickupKm:
-          profile.latitude != null && profile.longitude != null
-            ? parseFloat(
-                calculateDistance(profile.latitude, profile.longitude, p.pickupLat, p.pickupLng).toFixed(1)
-              )
-            : null,
+
+    if (activeQueue) {
+      const candidateIds = (activeQueue.candidateIds as string[]) || []
+      const currentCandidateId = candidateIds[activeQueue.currentIndex]
+
+      if (currentCandidateId === session.user.id) {
+        const ride = await prisma.ride.findUnique({
+          where: { id: activeQueue.rideId },
+          select: { status: true },
+        })
+
+        if (ride?.status === 'SEARCHING') {
+          const payload = activeQueue.ridePayload as any
+          const elapsed = (Date.now() - new Date(activeQueue.dispatchedAt).getTime()) / 1000
+          const remainingTimeout = Math.max(1, Math.round(15 - elapsed))
+
+          pendingRide = {
+            ...payload,
+            timeoutSeconds: remainingTimeout,
+            distanceToPickupKm:
+              profile.latitude != null && profile.longitude != null && payload.pickupLat != null && payload.pickupLng != null
+                ? parseFloat(
+                    calculateDistance(profile.latitude, profile.longitude, payload.pickupLat, payload.pickupLng).toFixed(1)
+                  )
+                : null,
+          }
+        }
+      }
+    } else {
+      const p = await prisma.ride.findFirst({
+        where: {
+          status: 'SEARCHING',
+          vehicleType: profile.vehicleType,
+          createdAt: { gte: new Date(Date.now() - 2 * 60 * 1000) },
+        },
+        include: { client: { select: { name: true } } },
+        orderBy: { createdAt: 'desc' },
+      })
+      if (p) {
+        const clientName = p.client?.name ?? 'khách'
+        pendingRide = {
+          rideId: p.id,
+          acceptToken: p.acceptToken,
+          vehicleType: p.vehicleType,
+          pickup: `Vị trí hiện tại của ${clientName}`,
+          dropoff: p.dropoffAddress || p.dropoffName || 'Điểm đến',
+          pickupLat: p.pickupLat,
+          pickupLng: p.pickupLng,
+          dropoffLat: p.dropoffLat,
+          dropoffLng: p.dropoffLng,
+          rideKm: p.distanceKm,
+          price: p.totalPrice,
+          note: p.note,
+          timeoutSeconds: 15,
+          distanceToPickupKm:
+            profile.latitude != null && profile.longitude != null
+              ? parseFloat(
+                  calculateDistance(profile.latitude, profile.longitude, p.pickupLat, p.pickupLng).toFixed(1)
+                )
+              : null,
+        }
       }
     }
   }

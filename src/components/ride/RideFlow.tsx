@@ -264,7 +264,7 @@ export function RideFlow() {
         name: data.driver.name,
         phone: data.driver.phone,
         plate: data.driver.vehiclePlate ?? '',
-        vehicleType: data.vehicleType,
+        vehicleType: data.driver.vehicleType || data.vehicleType,
         rating: data.driver.rating ?? 5,
         avatar: data.driver.avatar,
         latitude: data.driver.latitude,

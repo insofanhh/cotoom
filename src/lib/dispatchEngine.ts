@@ -157,12 +157,18 @@ export async function createDispatchQueue(ride: RideRecord, acceptToken: string)
     return
   }
 
+  const rideWithClient = await prisma.ride.findUnique({
+    where: { id: ride.id },
+    include: { client: { select: { name: true } } },
+  })
+  const clientName = rideWithClient?.client?.name ?? 'khách'
+
   const ridePayload = {
     rideId: ride.id,
     acceptUrl: `${process.env.NEXTAUTH_URL}/driver/accept?rideId=${ride.id}&token=${acceptToken}`,
     acceptToken,
     vehicleType: ride.vehicleType,
-    pickup: ride.pickupAddress || 'Vị trí hiện tại',
+    pickup: `Vị trí hiện tại của ${clientName}`,
     dropoff: ride.dropoffAddress || ride.dropoffName || 'Điểm đến',
     pickupLat: ride.pickupLat,
     pickupLng: ride.pickupLng,
