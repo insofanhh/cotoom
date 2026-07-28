@@ -18,7 +18,7 @@ import { calculateDistance } from '@/lib/utils'
 import { pusherServer } from '@/lib/pusher'
 import { sendPushToUser } from '@/lib/push'
 
-const DRIVER_TIMEOUT_SECONDS = 20
+const DRIVER_TIMEOUT_SECONDS = 25
 
 export type RideRecord = {
   id: string

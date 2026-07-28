@@ -58,7 +58,7 @@ const vehicleLabels: Record<string, string> = {
   ELECTRIC_CAR: 'Xe điện',
 }
 
-const INCOMING_TIMEOUT_SECONDS = 20
+const INCOMING_TIMEOUT_SECONDS = 25
 
 export function DriverDashboardClient({ profile, userId, userName, adminZaloPhone, initialActiveRide, initialPendingRide, earnings, recentRides }: Props) {
   const [localProfile, setLocalProfile] = useState(profile)
