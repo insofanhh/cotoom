@@ -20,7 +20,11 @@ export async function GET() {
     const ride = await prisma.ride.findFirst({
       where: {
         clientId: session.user.id,
-        status: { in: ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'] },
+        // Only restore rides that have a confirmed driver.
+        // SEARCHING is intentionally excluded — if the client navigates away during
+        // searching, they should restart the flow. The 409 guard in POST /api/rides
+        // still prevents duplicate bookings while a SEARCHING ride is active.
+        status: { in: ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'] },
       },
       include: {
         driver: {

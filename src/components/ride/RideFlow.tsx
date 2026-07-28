@@ -403,16 +403,14 @@ export function RideFlow() {
       })
 
       if (res.status === 409) {
-        // Client already has an active ride — restore it instead of erroring
+        // Client already has an active SEARCHING ride — revert to PREVIEW and warn them
         const err = await res.json()
-        if (err.existingRideId) {
-          setActiveRideId(err.existingRideId)
-          setFlowState('SEARCHING')
-          toast.info('Bạn đang có chuyến xe đang diễn ra', { description: 'Tiếp tục theo dõi chuyến xe hiện tại.' })
-        } else {
-          setFlowState('ERROR')
-          setErrorMessage(err.message ?? 'Có lỗi xảy ra, vui lòng thử lại')
-        }
+        setFlowState('PREVIEW')
+        setDrawerOpen(true)
+        toast.warning('Bạn đang có chuyến xe chưa hoàn thành', {
+          description: 'Hãy hủy chuyến hiện tại trước khi đặt chuyến mới.',
+          duration: 5000,
+        })
         return
       }
 
