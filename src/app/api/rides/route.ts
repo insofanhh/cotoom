@@ -39,6 +39,21 @@ export async function POST(req: NextRequest) {
     const totalPrice = computePrice(rate, distanceKm)
     const acceptToken = generateToken(48)
 
+    // Block duplicate rides — client cannot have more than one active ride at a time
+    const existingRide = await prisma.ride.findFirst({
+      where: {
+        clientId: session.user.id,
+        status: { in: ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'] },
+      },
+      select: { id: true, status: true },
+    })
+    if (existingRide) {
+      return NextResponse.json(
+        { message: 'Bạn đang có chuyến xe đang diễn ra', existingRideId: existingRide.id },
+        { status: 409 }
+      )
+    }
+
     const ride = await prisma.ride.create({
       data: {
         clientId: session.user.id,

@@ -90,6 +90,44 @@ export function RideFlow() {
       .catch(() => {}) // defaults still apply
   }, [])
 
+  // On mount: check if this client already has an active ride and restore flow state.
+  // Prevents duplicate booking when client navigates away and comes back.
+  useEffect(() => {
+    if (flowState !== 'IDLE') return // Already in a flow — skip
+    fetch('/api/rides/active')
+      .then((res) => res.json())
+      .then((data) => {
+        const ride = data?.ride
+        if (!ride) return
+        setActiveRideId(ride.id)
+        const statusMap: Record<string, any> = {
+          SEARCHING: 'SEARCHING',
+          ACCEPTED: 'DRIVER_FOUND',
+          ARRIVED: 'ARRIVED',
+          IN_PROGRESS: 'IN_PROGRESS',
+        }
+        const nextFlowState = statusMap[ride.status]
+        if (!nextFlowState) return
+        if (ride.driver) {
+          setDriverInfo({
+            id: ride.driver.id,
+            name: ride.driver.name,
+            phone: ride.driver.phone,
+            plate: ride.driver.vehiclePlate,
+            vehicleType: ride.driver.vehicleType,
+            rating: ride.driver.rating,
+            avatar: undefined,
+            latitude: ride.driver.latitude,
+            longitude: ride.driver.longitude,
+          })
+        }
+        setFlowState(nextFlowState)
+      })
+      .catch(() => {})
+  // Only run once on mount — intentionally omitting deps to avoid infinite loop
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Fetch client location
   useEffect(() => {
     if (typeof window !== 'undefined' && navigator.geolocation) {
@@ -363,6 +401,20 @@ export function RideFlow() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(booking),
       })
+
+      if (res.status === 409) {
+        // Client already has an active ride — restore it instead of erroring
+        const err = await res.json()
+        if (err.existingRideId) {
+          setActiveRideId(err.existingRideId)
+          setFlowState('SEARCHING')
+          toast.info('Bạn đang có chuyến xe đang diễn ra', { description: 'Tiếp tục theo dõi chuyến xe hiện tại.' })
+        } else {
+          setFlowState('ERROR')
+          setErrorMessage(err.message ?? 'Có lỗi xảy ra, vui lòng thử lại')
+        }
+        return
+      }
 
       if (!res.ok) {
         const err = await res.json()
